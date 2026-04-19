@@ -1,9 +1,34 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'wouter';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ChatInterface } from '@/components/ChatInterface';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
+const HEADING = "Tell me what you're building.";
+
 export default function Home() {
+  const [typedChars, setTypedChars] = useState(0);
+  const headingDone = typedChars >= HEADING.length;
+
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null;
+    const timeout = setTimeout(() => {
+      interval = setInterval(() => {
+        setTypedChars(prev => {
+          if (prev >= HEADING.length) {
+            if (interval) clearInterval(interval);
+            return prev;
+          }
+          return prev + 1;
+        });
+      }, 48);
+    }, 700);
+    return () => {
+      clearTimeout(timeout);
+      if (interval) clearInterval(interval);
+    };
+  }, []);
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       {/* Minimal floating nav — top right */}
@@ -48,31 +73,39 @@ export default function Home() {
             </span>
           </motion.div>
 
-          {/* Hero heading */}
+          {/* Hero heading — types in character by character */}
           <motion.h1
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
+            transition={{ duration: 0.4, delay: 0.2 }}
             className="font-syne font-bold text-foreground leading-[1.05] mb-10 text-balance"
             style={{ fontSize: 'clamp(2.5rem, 7vw, 5rem)' }}
           >
-            Tell me what you're building.
+            {HEADING.slice(0, typedChars)}
+            {!headingDone && (
+              <span className="cursor-blink" aria-hidden="true" />
+            )}
           </motion.h1>
 
-          {/* Chat interface */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-          >
-            <ChatInterface />
-          </motion.div>
+          {/* Chat interface — appears once heading finishes typing */}
+          <AnimatePresence>
+            {headingDone && (
+              <motion.div
+                key="chat"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4 }}
+              >
+                <ChatInterface />
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Footer hint */}
           <motion.p
             initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.6 }}
+            animate={{ opacity: headingDone ? 1 : 0 }}
+            transition={{ duration: 0.5, delay: 0.5 }}
             className="mt-8 text-xs text-muted-foreground text-center"
           >
             Or{' '}

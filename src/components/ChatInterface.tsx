@@ -14,20 +14,32 @@ interface Message {
   content: string;
 }
 
-const INITIAL_MESSAGE: Message = {
-  role: 'assistant',
-  content:
-    "Hi — I'm SSM's AI assistant. What brings you here today? Are you looking for a website, security work, or something else?",
-};
+const INTRO =
+  "Hi, I'm Zak! I specialise in helping businesses redesign their online presence — bespoke websites and secure network infrastructure. What are you working on?";
 
 class ChatErrorBoundary extends Error {}
 
 export function ChatInterface() {
-  const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE]);
+  const [messages, setMessages] = useState<Message[]>([{ role: 'assistant', content: '' }]);
+  const [isInitialTyping, setIsInitialTyping] = useState(true);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [leadCaptured, setLeadCaptured] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Type in the intro message character by character on mount
+  useEffect(() => {
+    let i = 0;
+    const interval = setInterval(() => {
+      i++;
+      setMessages([{ role: 'assistant', content: INTRO.slice(0, i) }]);
+      if (i >= INTRO.length) {
+        clearInterval(interval);
+        setIsInitialTyping(false);
+      }
+    }, 26);
+    return () => clearInterval(interval);
+  }, []);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -40,7 +52,7 @@ export function ChatInterface() {
 
   async function sendMessage() {
     const text = input.trim();
-    if (!text || isStreaming) return;
+    if (!text || isStreaming || isInitialTyping) return;
 
     setInput('');
     setError(null);
@@ -176,8 +188,8 @@ export function ChatInterface() {
               {msg.role === 'assistant' ? (
                 <div className="prose prose-sm max-w-none">
                   <ReactMarkdown>{msg.content}</ReactMarkdown>
-                  {/* Blinking cursor while this is the last message and streaming */}
-                  {isStreaming && i === messages.length - 1 && (
+                  {/* Blinking cursor while streaming or initial typing */}
+                  {(isStreaming || isInitialTyping) && i === messages.length - 1 && (
                     <span className="cursor-blink" aria-hidden="true" />
                   )}
                 </div>
@@ -220,7 +232,7 @@ export function ChatInterface() {
           onKeyDown={handleKeyDown}
           placeholder="Type your message…"
           rows={1}
-          disabled={isStreaming}
+          disabled={isStreaming || isInitialTyping}
           className={cn(
             'w-full resize-none rounded-[var(--radius)] border border-border bg-card',
             'px-4 py-3 pr-12 text-sm text-foreground placeholder:text-muted-foreground',
@@ -238,7 +250,7 @@ export function ChatInterface() {
         />
         <button
           type="submit"
-          disabled={!input.trim() || isStreaming}
+          disabled={!input.trim() || isStreaming || isInitialTyping}
           className={cn(
             'absolute right-3 bottom-3 h-7 w-7 flex items-center justify-center',
             'rounded-[var(--radius)] bg-primary text-primary-foreground',
