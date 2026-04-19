@@ -612,10 +612,14 @@ function ProjectForm({
   initial,
   onSave,
   onCancel,
+  saving,
+  error,
 }: {
   initial?: Partial<Project>;
   onSave: (data: Partial<Project>) => void;
   onCancel: () => void;
+  saving?: boolean;
+  error?: string | null;
 }) {
   const [form, setForm] = useState<Partial<Project>>({
     title: '',
@@ -697,9 +701,18 @@ function ProjectForm({
         />
         Featured project
       </label>
+      {error && (
+        <p className="text-sm text-destructive border border-destructive/30 bg-destructive/5 rounded px-3 py-2">
+          {error}
+        </p>
+      )}
       <div className="flex gap-3 pt-2">
-        <Button onClick={handleSave} size="sm">Save project</Button>
-        <Button variant="outline" onClick={onCancel} size="sm">Cancel</Button>
+        <Button type="button" onClick={handleSave} size="sm" disabled={saving}>
+          {saving ? 'Saving…' : 'Save project'}
+        </Button>
+        <Button type="button" variant="outline" onClick={onCancel} size="sm" disabled={saving}>
+          Cancel
+        </Button>
       </div>
     </div>
   );
@@ -716,13 +729,17 @@ function PortfolioTab() {
     queryFn: () => apiRequest<Project[]>('GET', '/api/admin/projects'),
   });
 
+  const [projectError, setProjectError] = useState<string | null>(null);
+
   const createProject = useMutation({
     mutationFn: (data: Partial<Project>) =>
       apiRequest('POST', '/api/admin/projects', data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'projects'] });
       setAddingNew(false);
+      setProjectError(null);
     },
+    onError: (err: Error) => setProjectError(err.message || 'Failed to save project'),
   });
 
   const updateProject = useMutation({
@@ -731,7 +748,9 @@ function PortfolioTab() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'projects'] });
       setEditProject(null);
+      setProjectError(null);
     },
+    onError: (err: Error) => setProjectError(err.message || 'Failed to save project'),
   });
 
   const deleteProject = useMutation({
@@ -756,7 +775,9 @@ function PortfolioTab() {
           <h3 className="font-syne font-bold text-lg text-foreground mb-4">New project</h3>
           <ProjectForm
             onSave={data => createProject.mutate(data)}
-            onCancel={() => setAddingNew(false)}
+            onCancel={() => { setAddingNew(false); setProjectError(null); }}
+            saving={createProject.isPending}
+            error={projectError}
           />
         </div>
       )}
@@ -777,7 +798,9 @@ function PortfolioTab() {
                   <ProjectForm
                     initial={editProject}
                     onSave={data => updateProject.mutate({ id: project.id, data })}
-                    onCancel={() => setEditProject(null)}
+                    onCancel={() => { setEditProject(null); setProjectError(null); }}
+                    saving={updateProject.isPending}
+                    error={projectError}
                   />
                 </div>
               ) : (
