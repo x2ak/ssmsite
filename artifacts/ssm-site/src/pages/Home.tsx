@@ -1,14 +1,24 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Menu, X } from 'lucide-react';
 import { ChatInterface } from '@/components/ChatInterface';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { NetworkBackground } from '@/components/NetworkBackground';
 
 const HEADING = "Tell me what you're building.";
 
+const NAV_LINKS = [
+  { href: '/work',     label: 'Work'     },
+  { href: '/services', label: 'Services' },
+  { href: '/about',    label: 'About'    },
+  { href: '/contact',  label: 'Contact'  },
+];
+
 export default function Home() {
   const [typedChars, setTypedChars] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [, navigate] = useLocation();
   const headingDone = typedChars >= HEADING.length;
 
   useEffect(() => {
@@ -30,24 +40,27 @@ export default function Home() {
     };
   }, []);
 
+  function handleMobileNav(href: string) {
+    setMenuOpen(false);
+    navigate(href);
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-background relative overflow-hidden">
       <NetworkBackground />
-      {/* Minimal floating nav — top right */}
+
+      {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-6 py-4">
         <Link href="/">
           <span className="font-mono text-xs font-medium tracking-widest uppercase text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
             SSM-LTD
           </span>
         </Link>
-        <nav className="flex items-center gap-6">
+
+        <nav className="flex items-center gap-4">
+          {/* Desktop nav — hidden on mobile */}
           <div className="hidden sm:flex items-center gap-6">
-            {[
-              { href: '/work', label: 'Work' },
-              { href: '/services', label: 'Services' },
-              { href: '/about', label: 'About' },
-              { href: '/contact', label: 'Contact' },
-            ].map(({ href, label }) => (
+            {NAV_LINKS.map(({ href, label }) => (
               <Link key={href} href={href}>
                 <span className="text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
                   {label}
@@ -55,9 +68,64 @@ export default function Home() {
               </Link>
             ))}
           </div>
+
           <ThemeToggle />
+
+          {/* Hamburger — visible on mobile only */}
+          <button
+            className="sm:hidden flex items-center justify-center w-8 h-8 text-muted-foreground hover:text-foreground transition-colors"
+            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+            onClick={() => setMenuOpen(o => !o)}
+          >
+            {menuOpen ? <X size={18} /> : <Menu size={18} />}
+          </button>
         </nav>
       </header>
+
+      {/* Mobile nav drawer */}
+      <AnimatePresence>
+        {menuOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              key="backdrop"
+              className="fixed inset-0 z-30 sm:hidden"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => setMenuOpen(false)}
+            />
+
+            {/* Panel */}
+            <motion.div
+              key="panel"
+              className="fixed top-[56px] left-0 right-0 z-40 sm:hidden border-b border-border bg-background/90 backdrop-blur-md px-6 py-4"
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2 }}
+            >
+              <ul className="flex flex-col gap-1">
+                {NAV_LINKS.map(({ href, label }) => (
+                  <li key={href}>
+                    <button
+                      className="w-full text-left py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors border-b border-border/50 last:border-0"
+                      onClick={() => handleMobileNav(href)}
+                    >
+                      {label}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+
+              <p className="mt-4 text-xs text-muted-foreground/60 pb-1">
+                Or use the chat below to tell us what you need.
+              </p>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Main content — vertically centred */}
       <main className="flex-1 flex flex-col items-center justify-center px-6 py-24 relative z-10">
