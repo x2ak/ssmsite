@@ -5,6 +5,7 @@ import {
   type KeyboardEvent,
   type FormEvent,
 } from 'react';
+import { useLocation } from 'wouter';
 import ReactMarkdown from 'react-markdown';
 import { Send, CheckCircle, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -26,6 +27,7 @@ export function ChatInterface() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [leadCaptured, setLeadCaptured] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [, navigate] = useLocation();
 
   // Type in the intro message character by character on mount
   useEffect(() => {
@@ -53,6 +55,11 @@ export function ChatInterface() {
   async function sendMessage() {
     const text = input.trim();
     if (!text || isStreaming || isInitialTyping) return;
+
+    if (text.toLowerCase() === 'admin') {
+      navigate('/admin');
+      return;
+    }
 
     setInput('');
     setError(null);
