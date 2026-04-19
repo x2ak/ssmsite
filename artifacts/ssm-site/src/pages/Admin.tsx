@@ -648,17 +648,23 @@ function ProjectForm({
     title: '',
     slug: '',
     client: '',
+    year: undefined,
     description: '',
     longDescription: '',
     tags: [],
+    services: [],
     imageUrl: '',
     imageUrls: [],
     liveUrl: '',
     featured: false,
+    caseStudy: false,
+    testimonial: '',
+    testimonialAuthor: '',
     order: 0,
     ...initial,
   });
   const [tagsInput, setTagsInput] = useState((initial?.tags ?? []).join(', '));
+  const [servicesInput, setServicesInput] = useState((initial?.services ?? []).join(', '));
   const [heroUploading, setHeroUploading] = useState(false);
   const [heroUploadError, setHeroUploadError] = useState<string | null>(null);
   const heroFileRef = useRef<HTMLInputElement>(null);
@@ -693,11 +699,9 @@ function ProjectForm({
   }
 
   function handleSave() {
-    const tags = tagsInput
-      .split(',')
-      .map(t => t.trim())
-      .filter(Boolean);
-    onSave({ ...form, tags });
+    const tags = tagsInput.split(',').map(t => t.trim()).filter(Boolean);
+    const services = servicesInput.split(',').map(s => s.trim()).filter(Boolean);
+    onSave({ ...form, tags, services });
   }
 
   return (
@@ -712,9 +716,20 @@ function ProjectForm({
           <Input value={form.slug ?? ''} onChange={e => handleChange('slug', e.target.value)} placeholder="my-project" />
         </div>
       </div>
-      <div className="space-y-1.5">
-        <Label>Client</Label>
-        <Input value={form.client ?? ''} onChange={e => handleChange('client', e.target.value)} />
+      <div className="grid grid-cols-3 gap-4">
+        <div className="col-span-2 space-y-1.5">
+          <Label>Client</Label>
+          <Input value={form.client ?? ''} onChange={e => handleChange('client', e.target.value)} />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Year</Label>
+          <Input
+            type="number"
+            value={form.year ?? ''}
+            onChange={e => handleChange('year', e.target.value ? parseInt(e.target.value, 10) : undefined)}
+            placeholder={String(new Date().getFullYear())}
+          />
+        </div>
       </div>
       <div className="space-y-1.5">
         <Label>Description (short)</Label>
@@ -727,8 +742,14 @@ function ProjectForm({
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label>Tags (comma-separated)</Label>
-          <Input value={tagsInput} onChange={e => setTagsInput(e.target.value)} placeholder="Web Dev, React, Security" />
+          <Input value={tagsInput} onChange={e => setTagsInput(e.target.value)} placeholder="React, TypeScript, PostgreSQL" />
         </div>
+        <div className="space-y-1.5">
+          <Label>Services (comma-separated)</Label>
+          <Input value={servicesInput} onChange={e => setServicesInput(e.target.value)} placeholder="Web Design, Cybersecurity Audit" />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label>Order</Label>
           <Input type="number" value={form.order ?? 0} onChange={e => handleChange('order', parseInt(e.target.value, 10))} />
@@ -779,15 +800,48 @@ function ProjectForm({
           <Input value={form.imageUrl ?? ''} onChange={e => handleChange('imageUrl', e.target.value)} placeholder="https://…" />
         </div>
       </div>
-      <label className="flex items-center gap-2 cursor-pointer text-sm text-foreground">
-        <input
-          type="checkbox"
-          checked={form.featured ?? false}
-          onChange={e => handleChange('featured', e.target.checked)}
-          className="rounded"
-        />
-        Featured project
-      </label>
+      {/* Testimonial */}
+      <div className="space-y-3 border border-border rounded-[var(--radius)] p-4">
+        <Label className="text-xs font-mono uppercase tracking-widest text-muted-foreground">Testimonial</Label>
+        <div className="space-y-1.5">
+          <Textarea
+            value={form.testimonial ?? ''}
+            onChange={e => handleChange('testimonial', e.target.value)}
+            rows={3}
+            placeholder="Quote from the client…"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Attribution</Label>
+          <Input
+            value={form.testimonialAuthor ?? ''}
+            onChange={e => handleChange('testimonialAuthor', e.target.value)}
+            placeholder="Jane Smith, Head of IT at Acme Ltd"
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <label className="flex items-center gap-2 cursor-pointer text-sm text-foreground">
+          <input
+            type="checkbox"
+            checked={form.featured ?? false}
+            onChange={e => handleChange('featured', e.target.checked)}
+            className="rounded"
+          />
+          Featured project
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer text-sm text-foreground">
+          <input
+            type="checkbox"
+            checked={form.caseStudy ?? false}
+            onChange={e => handleChange('caseStudy', e.target.checked)}
+            className="rounded"
+          />
+          Full case study
+          <span className="text-xs text-muted-foreground">(shows write-up &amp; sections; otherwise listed as showcase only)</span>
+        </label>
+      </div>
       {error && (
         <p className="text-sm text-destructive border border-destructive/30 bg-destructive/5 rounded px-3 py-2">
           {error}
@@ -894,9 +948,16 @@ function PortfolioTab() {
                 <>
                   <div className="flex items-center justify-between px-4 py-3">
                     <div className="min-w-0">
-                      <p className="font-medium text-sm text-foreground truncate">{project.title}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-sm text-foreground truncate">{project.title}</p>
+                        {project.caseStudy && (
+                          <span className="text-[9px] font-mono uppercase tracking-wider text-primary border border-primary/30 px-1.5 py-0.5 flex-shrink-0">
+                            Case Study
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground truncate">
-                        {project.client ?? 'No client'} · /{project.slug}
+                        {project.client ?? 'No client'}{project.year ? ` · ${project.year}` : ''} · /{project.slug}
                       </p>
                     </div>
                     <div className="flex items-center gap-1.5 ml-4 flex-shrink-0">

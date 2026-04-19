@@ -62,12 +62,18 @@ function FeaturedCard({ project, gradientIndex }: { project: Project; gradientIn
         {/* Content */}
         <div className="lg:col-span-2 p-7 flex flex-col justify-between border-l border-border">
           <div>
-            <div className="flex items-center gap-2 mb-5">
+            <div className="flex items-center gap-2 flex-wrap mb-5">
               <span className="text-[10px] font-mono uppercase tracking-[0.15em] text-primary">Featured</span>
               {project.client && (
                 <>
                   <span className="text-border">·</span>
                   <span className="text-[10px] font-mono uppercase tracking-[0.1em] text-muted-foreground">{project.client}</span>
+                </>
+              )}
+              {project.year && (
+                <>
+                  <span className="text-border">·</span>
+                  <span className="text-[10px] font-mono tracking-[0.1em] text-muted-foreground">{project.year}</span>
                 </>
               )}
             </div>
@@ -82,6 +88,15 @@ function FeaturedCard({ project, gradientIndex }: { project: Project; gradientIn
             </p>
           </div>
           <div className="mt-6">
+            {(project.services ?? []).length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {(project.services as string[]).map(s => (
+                  <span key={s} className="text-[10px] font-mono uppercase tracking-wider bg-primary/10 text-primary border border-primary/20 px-2 py-0.5">
+                    {s}
+                  </span>
+                ))}
+              </div>
+            )}
             {(project.tags ?? []).length > 0 && (
               <div className="flex flex-wrap gap-1.5 mb-4">
                 {(project.tags ?? []).map(tag => (
@@ -92,7 +107,7 @@ function FeaturedCard({ project, gradientIndex }: { project: Project; gradientIn
               </div>
             )}
             <span className="inline-flex items-center gap-1.5 text-sm text-primary font-medium group-hover:gap-2.5 transition-all">
-              View project
+              {project.caseStudy ? 'Read case study' : 'View project'}
               <ArrowRight size={14} />
             </span>
           </div>
@@ -143,17 +158,34 @@ function GridCard({ project, index, gradientIndex }: { project: Project; index: 
         </div>
 
         {/* Meta */}
-        {project.client && (
-          <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground mb-1">
-            {project.client}
-          </p>
-        )}
+        <div className="flex items-center gap-1.5 flex-wrap mb-1">
+          {project.client && (
+            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+              {project.client}
+            </p>
+          )}
+          {project.client && project.year && (
+            <span className="text-border text-[10px]">·</span>
+          )}
+          {project.year && (
+            <p className="font-mono text-[10px] tracking-[0.1em] text-muted-foreground">{project.year}</p>
+          )}
+        </div>
         <h3 className="font-syne font-bold text-foreground leading-tight mb-2 group-hover:text-primary transition-colors">
           {project.title}
         </h3>
         <p className="text-sm text-muted-foreground leading-relaxed line-clamp-2 mb-3">
           {project.description}
         </p>
+        {(project.services ?? []).length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {(project.services as string[]).map(s => (
+              <span key={s} className="text-[10px] font-mono uppercase tracking-wider bg-primary/10 text-primary border border-primary/20 px-2 py-0.5">
+                {s}
+              </span>
+            ))}
+          </div>
+        )}
         {(project.tags ?? []).length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {(project.tags ?? []).map(tag => (

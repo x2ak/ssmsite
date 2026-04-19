@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { ArrowLeft, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, ExternalLink, ChevronLeft, ChevronRight, Quote } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { Badge } from '@/components/ui/badge';
 import { apiRequest } from '@/lib/queryClient';
@@ -19,7 +19,6 @@ function HeroCarousel({ images, title }: { images: string[]; title: string }) {
   const next = useCallback(() => setCurrent(c => (c + 1) % count), [count]);
   const prev = useCallback(() => setCurrent(c => (c - 1 + count) % count), [count]);
 
-  // Auto-advance every 4 seconds
   useEffect(() => {
     if (count <= 1 || paused) return;
     const id = setInterval(next, 4000);
@@ -28,7 +27,6 @@ function HeroCarousel({ images, title }: { images: string[]; title: string }) {
 
   if (count === 0) return null;
 
-  // Single image — no controls
   if (count === 1) {
     return (
       <div className="w-full aspect-video rounded-[var(--radius)] overflow-hidden mb-10 border border-border">
@@ -43,7 +41,6 @@ function HeroCarousel({ images, title }: { images: string[]; title: string }) {
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
-      {/* Slides */}
       <AnimatePresence mode="wait" initial={false}>
         <motion.img
           key={current}
@@ -57,7 +54,6 @@ function HeroCarousel({ images, title }: { images: string[]; title: string }) {
         />
       </AnimatePresence>
 
-      {/* Prev / Next */}
       <button
         type="button"
         onClick={prev}
@@ -75,7 +71,6 @@ function HeroCarousel({ images, title }: { images: string[]; title: string }) {
         <ChevronRight size={16} />
       </button>
 
-      {/* Dot indicators */}
       <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5">
         {images.map((_, i) => (
           <button
@@ -95,17 +90,13 @@ function HeroCarousel({ images, title }: { images: string[]; title: string }) {
   );
 }
 
-// ── Section photo grid ─────────────────────────────────────────────────────────
+// ── Section helpers ────────────────────────────────────────────────────────────
 
 function SectionPhotoGrid({ urls, title }: { urls: string[]; title: string }) {
   if (urls.length === 0) return null;
   return (
     <div className={`grid gap-4 ${
-      urls.length === 1
-        ? 'grid-cols-1'
-        : urls.length === 2
-        ? 'grid-cols-2'
-        : 'grid-cols-2 lg:grid-cols-3'
+      urls.length === 1 ? 'grid-cols-1' : urls.length === 2 ? 'grid-cols-2' : 'grid-cols-2 lg:grid-cols-3'
     }`}>
       {urls.map((url, j) => (
         <div
@@ -114,12 +105,7 @@ function SectionPhotoGrid({ urls, title }: { urls: string[]; title: string }) {
             urls.length === 1 ? 'aspect-video' : 'aspect-[4/3]'
           }`}
         >
-          <img
-            src={url}
-            alt={`${title} — photo ${j + 1}`}
-            className="w-full h-full object-cover"
-            loading="lazy"
-          />
+          <img src={url} alt={`${title} — photo ${j + 1}`} className="w-full h-full object-cover" loading="lazy" />
         </div>
       ))}
     </div>
@@ -133,8 +119,6 @@ function SectionBody({ body }: { body: string }) {
     </div>
   );
 }
-
-// ── Layout-aware section renderer ─────────────────────────────────────────────
 
 function SectionContent({ section }: { section: ProjectSection }) {
   const urls = section.imageUrls ?? [];
@@ -154,23 +138,12 @@ function SectionContent({ section }: { section: ProjectSection }) {
   if (layout === 'side-by-side') {
     return (
       <div className="flex flex-col md:flex-row gap-8">
-        {/* Text left */}
-        {hasBody && (
-          <div className="flex-1 min-w-0">
-            <SectionBody body={section.body} />
-          </div>
-        )}
-        {/* Photos right — stacks below on mobile */}
-        {hasPhotos && (
-          <div className="flex-1 min-w-0">
-            <SectionPhotoGrid urls={urls} title={section.title} />
-          </div>
-        )}
+        {hasBody && <div className="flex-1 min-w-0"><SectionBody body={section.body} /></div>}
+        {hasPhotos && <div className="flex-1 min-w-0"><SectionPhotoGrid urls={urls} title={section.title} /></div>}
       </div>
     );
   }
 
-  // Default: text-above (text first, then photos)
   return (
     <div className="space-y-6">
       {hasBody && <SectionBody body={section.body} />}
@@ -197,7 +170,6 @@ export default function ProjectDetail() {
     enabled: !!slug && !!project,
   });
 
-  // Build carousel image list: uploaded hero images take priority; fall back to imageUrl
   const heroImages: string[] = project
     ? (project.imageUrls ?? []).length > 0
       ? (project.imageUrls as string[])
@@ -206,10 +178,12 @@ export default function ProjectDetail() {
       : []
     : [];
 
+  const isCaseStudy = project?.caseStudy ?? false;
+
   return (
     <Layout>
       <div className="max-w-4xl mx-auto px-6 py-24">
-        {/* Back link */}
+        {/* Back */}
         <motion.div
           initial={{ opacity: 0, x: -8 }}
           animate={{ opacity: 1, x: 0 }}
@@ -229,21 +203,12 @@ export default function ProjectDetail() {
             <div className="h-4 w-20 bg-muted rounded" />
             <div className="h-12 w-2/3 bg-muted rounded" />
             <div className="h-64 w-full bg-muted rounded mt-6" />
-            <div className="space-y-3 mt-8">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-4 bg-muted rounded" style={{ width: `${75 + Math.random() * 20}%` }} />
-              ))}
-            </div>
           </div>
         ) : error || !project ? (
           <div className="text-center py-20">
-            <p className="text-muted-foreground mb-6">
-              This project could not be found.
-            </p>
+            <p className="text-muted-foreground mb-6">This project could not be found.</p>
             <Link href="/work">
-              <span className="text-primary hover:underline cursor-pointer">
-                Return to Our Work
-              </span>
+              <span className="text-primary hover:underline cursor-pointer">Return to Our Work</span>
             </Link>
           </div>
         ) : (
@@ -252,12 +217,28 @@ export default function ProjectDetail() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
-            {/* Client */}
-            {project.client && (
-              <p className="font-mono text-xs text-primary tracking-widest uppercase mb-3">
-                {project.client}
-              </p>
-            )}
+            {/* Client · Year · Case-study badge */}
+            <div className="flex items-center gap-3 flex-wrap mb-3">
+              {project.client && (
+                <p className="font-mono text-xs text-primary tracking-widest uppercase">
+                  {project.client}
+                </p>
+              )}
+              {project.client && (project.year || !isCaseStudy) && (
+                <span className="text-border text-xs">·</span>
+              )}
+              {project.year && (
+                <p className="font-mono text-xs text-muted-foreground tracking-widest">{project.year}</p>
+              )}
+              {project.year && !isCaseStudy && (
+                <span className="text-border text-xs">·</span>
+              )}
+              {!isCaseStudy && (
+                <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground border border-border px-2 py-0.5">
+                  Showcase
+                </span>
+              )}
+            </div>
 
             {/* Title */}
             <h1
@@ -266,6 +247,20 @@ export default function ProjectDetail() {
             >
               {project.title}
             </h1>
+
+            {/* Services */}
+            {(project.services ?? []).length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {(project.services as string[]).map(s => (
+                  <span
+                    key={s}
+                    className="text-[10px] font-mono uppercase tracking-wider bg-primary/10 text-primary border border-primary/20 px-2.5 py-1"
+                  >
+                    {s}
+                  </span>
+                ))}
+              </div>
+            )}
 
             {/* Tags */}
             {(project.tags ?? []).length > 0 && (
@@ -284,15 +279,15 @@ export default function ProjectDetail() {
               {project.description}
             </p>
 
-            {/* Long description */}
-            {project.longDescription && (
+            {/* Long description — case study only */}
+            {isCaseStudy && project.longDescription && (
               <div className="prose prose-neutral dark:prose-invert max-w-none mb-12">
                 <ReactMarkdown>{project.longDescription}</ReactMarkdown>
               </div>
             )}
 
-            {/* Sections */}
-            {sections.length > 0 && (
+            {/* Sections — case study only */}
+            {isCaseStudy && sections.length > 0 && (
               <div className="space-y-16 mb-16">
                 {sections.map((section, i) => (
                   <motion.section
@@ -308,13 +303,32 @@ export default function ProjectDetail() {
                       </span>
                       <div className="flex-1 h-px bg-border" />
                     </div>
-                    <h2 className="font-syne font-bold text-2xl text-foreground mb-6">
-                      {section.title}
-                    </h2>
+                    <h2 className="font-syne font-bold text-2xl text-foreground mb-6">{section.title}</h2>
                     <SectionContent section={section} />
                   </motion.section>
                 ))}
               </div>
+            )}
+
+            {/* Testimonial */}
+            {project.testimonial && (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5 }}
+                className="my-14 border-l-2 border-primary pl-6 py-2"
+              >
+                <Quote size={18} className="text-primary/40 mb-3" />
+                <blockquote className="font-syne text-lg text-foreground leading-relaxed italic mb-4">
+                  {project.testimonial}
+                </blockquote>
+                {project.testimonialAuthor && (
+                  <p className="font-mono text-xs text-muted-foreground uppercase tracking-widest">
+                    — {project.testimonialAuthor}
+                  </p>
+                )}
+              </motion.div>
             )}
 
             {/* Footer row */}
@@ -325,7 +339,6 @@ export default function ProjectDetail() {
                   Back to Our Work
                 </span>
               </Link>
-
               <div className="flex items-center gap-3">
                 {project.liveUrl && (
                   <a

@@ -223,7 +223,9 @@ export function registerRoutes(app: Express) {
   app.patch('/api/admin/projects/:id', requireAdmin, async (req, res) => {
     try {
       const id = parseInt(req.params.id, 10);
-      const updated = await updateProject(id, req.body);
+      // Strip read-only/auto fields so Drizzle never tries to cast them
+      const { id: _id, createdAt: _ca, ...data } = req.body as Record<string, unknown>;
+      const updated = await updateProject(id, data);
       res.json(updated);
     } catch (err) {
       console.error('Error updating project:', err);
@@ -312,7 +314,8 @@ export function registerRoutes(app: Express) {
   app.patch('/api/admin/posts/:id', requireAdmin, async (req, res) => {
     try {
       const id = parseInt(req.params.id, 10);
-      const updated = await updatePost(id, req.body);
+      const { id: _id, createdAt: _ca, ...data } = req.body as Record<string, unknown>;
+      const updated = await updatePost(id, data);
       res.json(updated);
     } catch (err) {
       console.error('Error updating post:', err);
