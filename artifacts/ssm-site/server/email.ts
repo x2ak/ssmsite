@@ -15,9 +15,6 @@ function getResend(): Resend {
 export async function sendEnquiryNotification(inquiry: Inquiry): Promise<void> {
   const resend = getResend();
   const sourceLabel = inquiry.source === 'chat' ? 'AI Chat' : 'Contact Form';
-  const transcript = inquiry.chatTranscript
-    ? `\n\n<h3>Chat Transcript</h3><pre style="background:#f5f5f5;padding:1rem;border-radius:4px;overflow:auto;">${inquiry.chatTranscript}</pre>`
-    : '';
 
   await resend.emails.send({
     from: FROM_ADDRESS,
@@ -51,7 +48,6 @@ export async function sendEnquiryNotification(inquiry: Inquiry): Promise<void> {
         <div style="background:#f5f5f5;padding:1rem;border-radius:4px;border-left:4px solid #00c8d7;">
           ${inquiry.message.replace(/\n/g, '<br>')}
         </div>
-        ${transcript}
       </div>
     `,
   });
