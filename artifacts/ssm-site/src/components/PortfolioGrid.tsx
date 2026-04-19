@@ -30,9 +30,18 @@ function FeaturedCard({ project, gradientIndex }: { project: Project; gradientIn
         transition={{ duration: 0.5 }}
         className="group grid grid-cols-1 lg:grid-cols-5 border border-border bg-card cursor-pointer hover:border-primary/40 transition-colors mb-0"
       >
-        {/* Image */}
+        {/* Image / Video */}
         <div className="lg:col-span-3 aspect-[16/9] lg:aspect-auto overflow-hidden bg-muted relative">
-          {project.imageUrl ? (
+          {project.previewVideoUrl ? (
+            <video
+              src={project.previewVideoUrl}
+              autoPlay
+              muted
+              loop
+              playsInline
+              className="w-full h-full object-cover"
+            />
+          ) : project.imageUrl ? (
             <img
               src={project.imageUrl}
               alt={project.title}
@@ -130,7 +139,16 @@ function GridCard({ project, index, gradientIndex }: { project: Project; index: 
       >
         {/* Thumbnail */}
         <div className="relative aspect-video overflow-hidden bg-muted mb-4">
-          {project.imageUrl ? (
+          {project.previewVideoUrl ? (
+            <video
+              src={project.previewVideoUrl}
+              autoPlay
+              muted
+              loop
+              playsInline
+              className="w-full h-full object-cover"
+            />
+          ) : project.imageUrl ? (
             <img
               src={project.imageUrl}
               alt={project.title}

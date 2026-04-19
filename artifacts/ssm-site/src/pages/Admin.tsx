@@ -655,6 +655,7 @@ function ProjectForm({
     services: [],
     imageUrl: '',
     imageUrls: [],
+    previewVideoUrl: '',
     liveUrl: '',
     featured: false,
     caseStudy: false,
@@ -668,6 +669,36 @@ function ProjectForm({
   const [heroUploading, setHeroUploading] = useState(false);
   const [heroUploadError, setHeroUploadError] = useState<string | null>(null);
   const heroFileRef = useRef<HTMLInputElement>(null);
+  const [videoUploading, setVideoUploading] = useState(false);
+  const [videoUploadError, setVideoUploadError] = useState<string | null>(null);
+  const videoFileRef = useRef<HTMLInputElement>(null);
+
+  async function handleVideoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setVideoUploading(true);
+    setVideoUploadError(null);
+    try {
+      const formData = new FormData();
+      formData.append('video', file);
+      const response = await fetch('/api/admin/projects/upload-preview-video', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(err.error ?? 'Upload failed');
+      }
+      const data = await response.json() as { url: string };
+      setForm(prev => ({ ...prev, previewVideoUrl: data.url }));
+    } catch (err) {
+      setVideoUploadError(err instanceof Error ? err.message : 'Upload failed — try again');
+    } finally {
+      setVideoUploading(false);
+      if (videoFileRef.current) videoFileRef.current.value = '';
+    }
+  }
 
   function handleChange(field: keyof Project, value: unknown) {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -800,6 +831,53 @@ function ProjectForm({
           <Input value={form.imageUrl ?? ''} onChange={e => handleChange('imageUrl', e.target.value)} placeholder="https://…" />
         </div>
       </div>
+      {/* Preview video */}
+      <div className="space-y-2 border border-border rounded-[var(--radius)] p-4">
+        <Label className="text-xs font-mono uppercase tracking-widest text-muted-foreground">Preview Video (card thumbnail)</Label>
+        <p className="text-xs text-muted-foreground">
+          Replaces the still image on portfolio cards. Short looping clip recommended (mp4, webm, mov · max 100 MB).
+        </p>
+        {form.previewVideoUrl ? (
+          <div className="relative">
+            <video
+              src={form.previewVideoUrl}
+              autoPlay
+              muted
+              loop
+              playsInline
+              className="w-full max-h-40 rounded-[var(--radius)] border border-border object-cover bg-muted"
+            />
+            <button
+              type="button"
+              onClick={() => setForm(prev => ({ ...prev, previewVideoUrl: '' }))}
+              className="absolute top-2 right-2 h-6 w-6 flex items-center justify-center rounded-full bg-background/80 text-foreground hover:text-destructive transition-colors"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        ) : (
+          <div>
+            <input
+              ref={videoFileRef}
+              type="file"
+              accept="video/mp4,video/webm,video/ogg,video/quicktime,video/x-msvideo"
+              onChange={handleVideoUpload}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => videoFileRef.current?.click()}
+              disabled={videoUploading}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-[var(--radius)] border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <Upload size={11} />
+              {videoUploading ? 'Uploading…' : 'Upload preview video'}
+            </button>
+            {videoUploadError && <p className="text-xs text-destructive mt-1">{videoUploadError}</p>}
+          </div>
+        )}
+      </div>
+
       {/* Testimonial */}
       <div className="space-y-3 border border-border rounded-[var(--radius)] p-4">
         <Label className="text-xs font-mono uppercase tracking-widest text-muted-foreground">Testimonial</Label>

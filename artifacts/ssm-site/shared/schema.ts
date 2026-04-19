@@ -32,6 +32,7 @@ export const projects = pgTable('projects', {
   liveUrl: text('live_url'),
   featured: boolean('featured').default(false),
   caseStudy: boolean('case_study').default(false),
+  previewVideoUrl: text('preview_video_url'),
   testimonial: text('testimonial'),
   testimonialAuthor: text('testimonial_author'),
   order: integer('order').default(0),

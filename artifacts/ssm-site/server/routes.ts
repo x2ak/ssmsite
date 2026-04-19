@@ -39,6 +39,7 @@ import { insertInquirySchema } from '../shared/schema';
 import bcrypt from 'bcryptjs';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const videoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
 
 export function registerRoutes(app: Express) {
 
@@ -472,6 +473,30 @@ export function registerRoutes(app: Express) {
     } catch (err) {
       console.error('Error uploading image:', err);
       res.status(500).json({ error: 'Upload failed' });
+    }
+  });
+
+  // Upload a preview video for a project thumbnail (100 MB limit)
+  app.post('/api/admin/projects/upload-preview-video', requireAdmin, videoUpload.single('video'), async (req, res) => {
+    try {
+      const file = req.file;
+      if (!file) { res.status(400).json({ error: 'No file provided' }); return; }
+      const allowed = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/x-msvideo'];
+      if (!allowed.includes(file.mimetype)) {
+        res.status(400).json({ error: 'Only video files are allowed (mp4, webm, ogg, mov, avi)' }); return;
+      }
+      const objectName = await uploadToGCS(file.buffer, file.originalname, file.mimetype);
+      // Reuse gallery_images table to store and serve the video via the existing stream endpoint
+      const record = await createGalleryImage({
+        filename: file.originalname,
+        objectName,
+        contentType: file.mimetype,
+        label: 'preview-video',
+      });
+      res.status(201).json({ id: record.id, url: `/api/gallery/images/${record.id}` });
+    } catch (err) {
+      console.error('Error uploading preview video:', err);
+      res.status(500).json({ error: 'Video upload failed' });
     }
   });
 
