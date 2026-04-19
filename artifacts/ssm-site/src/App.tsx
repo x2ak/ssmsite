@@ -5,6 +5,7 @@ import { queryClient } from '@/lib/queryClient';
 
 import Home from '@/pages/Home';
 import Work from '@/pages/Work';
+import ProjectDetail from '@/pages/ProjectDetail';
 import Services from '@/pages/Services';
 import About from '@/pages/About';
 import Blog from '@/pages/Blog';
@@ -20,6 +21,7 @@ export default function App() {
         <Switch>
           <Route path="/" component={Home} />
           <Route path="/work" component={Work} />
+          <Route path="/work/:slug" component={ProjectDetail} />
           <Route path="/services" component={Services} />
           <Route path="/about" component={About} />
           <Route path="/blog" component={Blog} />

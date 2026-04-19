@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ExternalLink } from 'lucide-react';
+import { Link } from 'wouter';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import type { Project } from '@shared/schema';
@@ -64,14 +65,14 @@ export function PortfolioGrid({ projects }: PortfolioGridProps) {
           className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
         >
           {filtered.map((project, i) => (
+            <Link key={project.id} href={`/work/${project.slug}`}>
             <motion.article
-              key={project.id}
               layout
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.4, delay: i * 0.06 }}
-              className="group rounded-[var(--radius)] border border-border bg-card overflow-hidden hover:border-primary/50 hover:shadow-[0_0_0_1px_var(--primary)] transition-all duration-300"
+              className="group rounded-[var(--radius)] border border-border bg-card overflow-hidden hover:border-primary/50 hover:shadow-[0_0_0_1px_var(--primary)] transition-all duration-300 cursor-pointer"
             >
               {/* Image / placeholder */}
               <div className="relative aspect-video overflow-hidden">
@@ -133,6 +134,7 @@ export function PortfolioGrid({ projects }: PortfolioGridProps) {
                 )}
               </div>
             </motion.article>
+            </Link>
           ))}
         </motion.div>
       </AnimatePresence>
