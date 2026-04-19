@@ -157,6 +157,16 @@ export function ChatInterface() {
       });
     } finally {
       setIsStreaming(false);
+      // Safety net: if the stream ended with an empty assistant bubble
+      // (e.g. silent server error), remove it and surface a message.
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last?.role === 'assistant' && !last.content.trim()) {
+          setError("Didn't get a response — you can also reach us at contact@ssmltd.co.uk.");
+          return prev.slice(0, -1);
+        }
+        return prev;
+      });
     }
   }
 

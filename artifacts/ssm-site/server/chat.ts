@@ -141,27 +141,8 @@ export async function handleChat(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // Fetch portfolio and active knowledge base entries for system prompt injection
-  const [projectsData, kbEntries] = await Promise.all([
-    getAllProjects(),
-    getAllKnowledgeBase(true),
-  ]);
-
-  const projectList = projectsData.length > 0
-    ? projectsData
-        .map(p => `- ${p.title}${p.client ? ` (${p.client})` : ''} [${(p.tags ?? []).join(', ')}]: ${p.description}`)
-        .join('\n')
-    : 'No portfolio projects listed yet — do not reference any specific past work.';
-
-  const knowledgeBaseText = kbEntries.length > 0
-    ? kbEntries
-        .map(e => `[${e.type.toUpperCase()}] ${e.title}:\n${e.content}`)
-        .join('\n\n')
-    : 'No active knowledge base entries.';
-
-  const systemPrompt = buildSystemPrompt(projectList, knowledgeBaseText);
-
-  // Set up SSE
+  // Open SSE connection immediately so ALL errors (including DB errors)
+  // are delivered as SSE error events rather than silently hanging.
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -170,6 +151,26 @@ export async function handleChat(req: Request, res: Response): Promise<void> {
   let fullText = '';
 
   try {
+    // Fetch portfolio and active knowledge base entries for system prompt injection
+    const [projectsData, kbEntries] = await Promise.all([
+      getAllProjects(),
+      getAllKnowledgeBase(true),
+    ]);
+
+    const projectList = projectsData.length > 0
+      ? projectsData
+          .map(p => `- ${p.title}${p.client ? ` (${p.client})` : ''} [${(p.tags ?? []).join(', ')}]: ${p.description}`)
+          .join('\n')
+      : 'No portfolio projects listed yet — do not reference any specific past work.';
+
+    const knowledgeBaseText = kbEntries.length > 0
+      ? kbEntries
+          .map(e => `[${e.type.toUpperCase()}] ${e.title}:\n${e.content}`)
+          .join('\n\n')
+      : 'No active knowledge base entries.';
+
+    const systemPrompt = buildSystemPrompt(projectList, knowledgeBaseText);
+
     const stream = anthropic.messages.stream({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1024,
