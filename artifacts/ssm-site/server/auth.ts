@@ -33,7 +33,14 @@ export function registerAuthRoutes(app: import('express').Express) {
         return;
       }
 
-      const valid = await bcrypt.compare(password, user.passwordHash);
+      // If an `admin` secret is set in the environment, use it as the
+      // authoritative plaintext password so Zak can rotate it via secrets
+      // without touching the database. Fall back to the stored bcrypt hash.
+      const envPassword = process.env.admin;
+      const valid = envPassword
+        ? password === envPassword
+        : await bcrypt.compare(password, user.passwordHash);
+
       if (!valid) {
         res.status(401).json({ error: 'Invalid credentials' });
         return;
