@@ -18,7 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@
 import { apiRequest } from '@/lib/queryClient';
 import { formatDate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
-import type { Inquiry, Project, Post } from '@shared/schema';
+import type { Inquiry, Project, Post, KnowledgeBaseEntry } from '@shared/schema';
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
@@ -735,6 +735,264 @@ function SettingsTab() {
   );
 }
 
+// ── Agent (Knowledge Base) tab ────────────────────────────────────────────────
+
+const KB_TYPES = ['general', 'deal', 'promotion', 'service'] as const;
+type KBType = typeof KB_TYPES[number];
+
+const TYPE_LABELS: Record<KBType, string> = {
+  general: 'General',
+  deal: 'Deal',
+  promotion: 'Promotion',
+  service: 'Service info',
+};
+
+const TYPE_COLOURS: Record<KBType, string> = {
+  general: 'bg-muted text-muted-foreground',
+  deal: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+  promotion: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400',
+  service: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+};
+
+function KBForm({
+  initial,
+  onSave,
+  onCancel,
+}: {
+  initial?: Partial<KnowledgeBaseEntry>;
+  onSave: (data: Partial<KnowledgeBaseEntry>) => void;
+  onCancel: () => void;
+}) {
+  const [form, setForm] = useState<Partial<KnowledgeBaseEntry>>({
+    title: '',
+    content: '',
+    type: 'general',
+    active: true,
+    ...initial,
+  });
+
+  function set(field: keyof KnowledgeBaseEntry, value: unknown) {
+    setForm(prev => ({ ...prev, [field]: value }));
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1.5">
+        <Label>Title</Label>
+        <Input
+          value={form.title ?? ''}
+          onChange={e => set('title', e.target.value)}
+          placeholder="e.g. Summer 2025 launch discount"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Type</Label>
+        <div className="flex gap-2 flex-wrap">
+          {KB_TYPES.map(t => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => set('type', t)}
+              className={cn(
+                'px-3 py-1.5 text-xs rounded-[var(--radius)] border transition-colors cursor-pointer',
+                form.type === t
+                  ? 'border-primary bg-primary/10 text-primary font-medium'
+                  : 'border-border text-muted-foreground hover:border-primary/40'
+              )}
+            >
+              {TYPE_LABELS[t]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Content</Label>
+        <Textarea
+          value={form.content ?? ''}
+          onChange={e => set('content', e.target.value)}
+          rows={5}
+          placeholder="Write exactly what the agent should know. Be specific — prices, dates, conditions, talking points."
+        />
+        <p className="text-xs text-muted-foreground">
+          This text is injected verbatim into the agent's context. The more specific, the better.
+        </p>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={form.active ?? true}
+            onChange={e => set('active', e.target.checked)}
+            className="w-4 h-4 accent-primary"
+          />
+          <span className="text-sm text-foreground">Active (visible to agent)</span>
+        </label>
+      </div>
+
+      <div className="flex gap-3 pt-2">
+        <Button onClick={() => onSave(form)} disabled={!form.title?.trim() || !form.content?.trim()}>
+          Save entry
+        </Button>
+        <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+      </div>
+    </div>
+  );
+}
+
+function AgentTab() {
+  const qc = useQueryClient();
+  const [showForm, setShowForm] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<KnowledgeBaseEntry | null>(null);
+
+  const { data: entries = [], isLoading } = useQuery<KnowledgeBaseEntry[]>({
+    queryKey: ['admin', 'knowledge-base'],
+    queryFn: () => apiRequest<KnowledgeBaseEntry[]>('GET', '/api/admin/knowledge-base'),
+  });
+
+  const create = useMutation({
+    mutationFn: (data: Partial<KnowledgeBaseEntry>) =>
+      apiRequest('POST', '/api/admin/knowledge-base', data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'knowledge-base'] });
+      setShowForm(false);
+    },
+  });
+
+  const update = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<KnowledgeBaseEntry> }) =>
+      apiRequest('PATCH', `/api/admin/knowledge-base/${id}`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'knowledge-base'] });
+      setEditingEntry(null);
+    },
+  });
+
+  const remove = useMutation({
+    mutationFn: (id: number) => apiRequest('DELETE', `/api/admin/knowledge-base/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'knowledge-base'] }),
+  });
+
+  const toggleActive = (entry: KnowledgeBaseEntry) =>
+    update.mutate({ id: entry.id, data: { active: !entry.active } });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3 mt-6">
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="h-20 bg-muted animate-pulse rounded-[var(--radius)]" />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-6 space-y-6">
+      {/* Description */}
+      <div className="rounded-[var(--radius)] border border-border bg-card p-4">
+        <h3 className="font-medium text-sm text-foreground mb-1">How this works</h3>
+        <p className="text-sm text-muted-foreground">
+          Every active entry below is injected into the homepage chat agent's context on every conversation. Use it to share current deals, promotions, service details, or anything you want Zak's agent to know and reference when talking to leads.
+        </p>
+      </div>
+
+      {/* Add button */}
+      {!showForm && !editingEntry && (
+        <Button onClick={() => setShowForm(true)}>
+          <Plus size={14} />
+          Add entry
+        </Button>
+      )}
+
+      {/* New entry form */}
+      {showForm && (
+        <div className="rounded-[var(--radius)] border border-primary/30 bg-card p-5">
+          <h3 className="font-medium text-sm text-foreground mb-4">New knowledge base entry</h3>
+          <KBForm
+            onSave={data => create.mutate(data)}
+            onCancel={() => setShowForm(false)}
+          />
+        </div>
+      )}
+
+      {/* Entries list */}
+      {entries.length === 0 && !showForm ? (
+        <p className="text-muted-foreground text-center py-12 text-sm">
+          No entries yet. Add your first deal, promotion, or service detail above.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {entries.map(entry => (
+            <div
+              key={entry.id}
+              className={cn(
+                'rounded-[var(--radius)] border bg-card overflow-hidden transition-opacity',
+                !entry.active && 'opacity-50',
+                entry.active ? 'border-border' : 'border-dashed border-border'
+              )}
+            >
+              {editingEntry?.id === entry.id ? (
+                <div className="p-5">
+                  <h3 className="font-medium text-sm text-foreground mb-4">Edit entry</h3>
+                  <KBForm
+                    initial={entry}
+                    onSave={data => update.mutate({ id: entry.id, data })}
+                    onCancel={() => setEditingEntry(null)}
+                  />
+                </div>
+              ) : (
+                <div className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium', TYPE_COLOURS[entry.type as KBType] ?? TYPE_COLOURS.general)}>
+                          {TYPE_LABELS[entry.type as KBType] ?? entry.type}
+                        </span>
+                        {!entry.active && (
+                          <span className="text-xs text-muted-foreground italic">inactive</span>
+                        )}
+                      </div>
+                      <p className="font-medium text-sm text-foreground">{entry.title}</p>
+                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{entry.content}</p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        title={entry.active ? 'Deactivate' : 'Activate'}
+                        onClick={() => toggleActive(entry)}
+                        className="p-1.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground cursor-pointer"
+                      >
+                        {entry.active ? <Eye size={14} /> : <EyeOff size={14} />}
+                      </button>
+                      <button
+                        title="Edit"
+                        onClick={() => setEditingEntry(entry)}
+                        className="p-1.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground cursor-pointer"
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                      <button
+                        title="Delete"
+                        onClick={() => {
+                          if (confirm(`Delete "${entry.title}"?`)) remove.mutate(entry.id);
+                        }}
+                        className="p-1.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-destructive cursor-pointer"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Admin shell ──────────────────────────────────────────────────────────
 
 export default function Admin() {
@@ -792,6 +1050,7 @@ export default function Admin() {
             <TabsTrigger value="enquiries">Enquiries</TabsTrigger>
             <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
             <TabsTrigger value="blog">Blog</TabsTrigger>
+            <TabsTrigger value="agent">Agent</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
           <TabsContent value="enquiries">
@@ -802,6 +1061,9 @@ export default function Admin() {
           </TabsContent>
           <TabsContent value="blog">
             <BlogTab />
+          </TabsContent>
+          <TabsContent value="agent">
+            <AgentTab />
           </TabsContent>
           <TabsContent value="settings">
             <SettingsTab />

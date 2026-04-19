@@ -16,6 +16,10 @@ import {
   createPost,
   updatePost,
   deletePost,
+  getAllKnowledgeBase,
+  createKnowledgeBaseEntry,
+  updateKnowledgeBaseEntry,
+  deleteKnowledgeBaseEntry,
   getAdminByUsername,
   updateAdminPassword,
 } from './storage';
@@ -220,6 +224,50 @@ export function registerRoutes(app: Express) {
     } catch (err) {
       console.error('Error deleting post:', err);
       res.status(500).json({ error: 'Failed to delete post' });
+    }
+  });
+
+  // ── Admin — Knowledge base ────────────────────────────────────────────────
+
+  app.get('/api/admin/knowledge-base', requireAdmin, async (_req, res) => {
+    try {
+      const all = await getAllKnowledgeBase(false);
+      res.json(all);
+    } catch (err) {
+      console.error('Error fetching knowledge base:', err);
+      res.status(500).json({ error: 'Failed to fetch knowledge base' });
+    }
+  });
+
+  app.post('/api/admin/knowledge-base', requireAdmin, async (req, res) => {
+    try {
+      const entry = await createKnowledgeBaseEntry(req.body);
+      res.status(201).json(entry);
+    } catch (err) {
+      console.error('Error creating KB entry:', err);
+      res.status(500).json({ error: 'Failed to create entry' });
+    }
+  });
+
+  app.patch('/api/admin/knowledge-base/:id', requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      const updated = await updateKnowledgeBaseEntry(id, req.body);
+      res.json(updated);
+    } catch (err) {
+      console.error('Error updating KB entry:', err);
+      res.status(500).json({ error: 'Failed to update entry' });
+    }
+  });
+
+  app.delete('/api/admin/knowledge-base/:id', requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      await deleteKnowledgeBaseEntry(id);
+      res.json({ success: true });
+    } catch (err) {
+      console.error('Error deleting KB entry:', err);
+      res.status(500).json({ error: 'Failed to delete entry' });
     }
   });
 

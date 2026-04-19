@@ -43,6 +43,16 @@ export const posts = pgTable('posts', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
+// Knowledge base — agent context injected into chat system prompt
+export const knowledgeBase = pgTable('knowledge_base', {
+  id: serial('id').primaryKey(),
+  title: text('title').notNull(),
+  content: text('content').notNull(),
+  type: text('type').notNull().default('general'), // 'deal' | 'promotion' | 'service' | 'general'
+  active: boolean('active').default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
 // Admin users — single row
 export const adminUsers = pgTable('admin_users', {
   id: serial('id').primaryKey(),
@@ -51,6 +61,11 @@ export const adminUsers = pgTable('admin_users', {
 });
 
 // Zod schemas
+export const insertKnowledgeBaseSchema = createInsertSchema(knowledgeBase);
+export const selectKnowledgeBaseSchema = createSelectSchema(knowledgeBase);
+export type KnowledgeBaseEntry = typeof knowledgeBase.$inferSelect;
+export type InsertKnowledgeBaseEntry = typeof knowledgeBase.$inferInsert;
+
 export const insertInquirySchema = createInsertSchema(inquiries, {
   email: z.string().email('Please enter a valid email address'),
   firstName: z.string().min(1, 'First name is required'),

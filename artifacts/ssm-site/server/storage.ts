@@ -1,7 +1,7 @@
 import { db } from './db';
-import { inquiries, projects, posts, adminUsers } from '../shared/schema';
+import { inquiries, projects, posts, adminUsers, knowledgeBase } from '../shared/schema';
 import { eq, desc, asc } from 'drizzle-orm';
-import type { InsertInquiry, InsertProject, InsertPost, Inquiry, Project, Post } from '../shared/schema';
+import type { InsertInquiry, InsertProject, InsertPost, Inquiry, Project, Post, KnowledgeBaseEntry, InsertKnowledgeBaseEntry } from '../shared/schema';
 
 // ── Enquiries ─────────────────────────────────────────────────────────────────
 
@@ -91,6 +91,29 @@ export async function updatePost(id: number, data: Partial<InsertPost>): Promise
 
 export async function deletePost(id: number): Promise<void> {
   await db.delete(posts).where(eq(posts.id, id));
+}
+
+// ── Knowledge base ────────────────────────────────────────────────────────────
+
+export async function getAllKnowledgeBase(activeOnly = false): Promise<KnowledgeBaseEntry[]> {
+  if (activeOnly) {
+    return db.select().from(knowledgeBase).where(eq(knowledgeBase.active, true)).orderBy(asc(knowledgeBase.createdAt));
+  }
+  return db.select().from(knowledgeBase).orderBy(asc(knowledgeBase.createdAt));
+}
+
+export async function createKnowledgeBaseEntry(data: InsertKnowledgeBaseEntry): Promise<KnowledgeBaseEntry> {
+  const [entry] = await db.insert(knowledgeBase).values(data).returning();
+  return entry;
+}
+
+export async function updateKnowledgeBaseEntry(id: number, data: Partial<InsertKnowledgeBaseEntry>): Promise<KnowledgeBaseEntry> {
+  const [entry] = await db.update(knowledgeBase).set(data).where(eq(knowledgeBase.id, id)).returning();
+  return entry;
+}
+
+export async function deleteKnowledgeBaseEntry(id: number): Promise<void> {
+  await db.delete(knowledgeBase).where(eq(knowledgeBase.id, id));
 }
 
 // ── Admin users ───────────────────────────────────────────────────────────────
