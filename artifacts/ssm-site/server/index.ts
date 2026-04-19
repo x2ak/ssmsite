@@ -1,12 +1,12 @@
 import 'dotenv/config';
 import express from 'express';
 import session from 'express-session';
+import connectPgSimple from 'connect-pg-simple';
+import pg from 'pg';
 import path from 'path';
 import { registerAuthRoutes } from './auth';
 import { registerRoutes } from './routes';
 
-// In the esbuild CJS bundle __dirname is a native global.
-// In development (ESM via tsx) we resolve relative to cwd.
 const distDir = path.resolve(process.cwd(), 'dist/public');
 
 const app = express();
@@ -18,6 +18,20 @@ const PORT = isProd
   ? (process.env.PORT || 3000)
   : (process.env.BACKEND_PORT || 5000);
 
+// ── Trust Replit's reverse proxy so secure cookies and req.ip work correctly ──
+
+app.set('trust proxy', 1);
+
+// ── Session store ─────────────────────────────────────────────────────────────
+// Use PostgreSQL so sessions survive restarts and work across multiple instances.
+
+const PgSession = connectPgSimple(session);
+
+const sessionPool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: isProd ? { rejectUnauthorized: false } : false,
+});
+
 // ── Middleware ────────────────────────────────────────────────────────────────
 
 app.use(express.json());
@@ -25,12 +39,18 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use(
   session({
+    store: new PgSession({
+      pool: sessionPool,
+      createTableIfMissing: true,
+      tableName: 'session',
+    }),
     secret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
     resave: false,
     saveUninitialized: false,
     cookie: {
       secure: isProd,
       httpOnly: true,
+      sameSite: isProd ? 'none' : 'lax',
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
     },
   })
