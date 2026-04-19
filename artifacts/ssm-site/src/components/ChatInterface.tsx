@@ -57,7 +57,7 @@ export function ChatInterface() {
     if (!text || isStreaming || isInitialTyping) return;
 
     if (text.toLowerCase() === 'admin') {
-      navigate('/admin');
+      navigate('/x7-control');
       return;
     }
 
