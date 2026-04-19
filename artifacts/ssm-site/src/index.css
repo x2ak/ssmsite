@@ -229,3 +229,10 @@ code, pre, kbd, samp {
   font-style: italic;
   margin: 1.5em 0;
 }
+
+/* Prevent iOS Safari auto-zoom on input focus — triggered when font-size < 16px */
+input,
+textarea,
+select {
+  font-size: max(16px, 1em);
+}
