@@ -28,5 +28,7 @@ export async function apiRequest<T = unknown>(
     throw new Error((error as { error?: string }).error || `HTTP ${response.status}`);
   }
 
-  return response.json() as Promise<T>;
+  return response.json().catch(() => {
+    throw new Error('Server unavailable — the admin panel requires a live backend connection.');
+  }) as Promise<T>;
 }

@@ -3,6 +3,7 @@ import { Link } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChatInterface } from '@/components/ChatInterface';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { NetworkBackground } from '@/components/NetworkBackground';
 
 const HEADING = "Tell me what you're building.";
 
@@ -30,7 +31,8 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col bg-background relative overflow-hidden">
+      <NetworkBackground />
       {/* Minimal floating nav — top right */}
       <header className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-6 py-4">
         <Link href="/">

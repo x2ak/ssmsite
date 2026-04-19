@@ -185,15 +185,20 @@ export function ChatInterface() {
                   : 'bg-card border border-border text-foreground mr-8'
               )}
             >
-              {msg.role === 'assistant' ? (
-                <div className="prose prose-sm max-w-none">
-                  <ReactMarkdown>{msg.content}</ReactMarkdown>
-                  {/* Blinking cursor while streaming or initial typing */}
-                  {(isStreaming || isInitialTyping) && i === messages.length - 1 && (
-                    <span className="cursor-blink" aria-hidden="true" />
-                  )}
-                </div>
-              ) : (
+              {msg.role === 'assistant' ? (() => {
+                const isTypingThis = (isStreaming || isInitialTyping) && i === messages.length - 1;
+                return (
+                  <div className="prose prose-sm max-w-none">
+                    {isTypingThis ? (
+                      <p style={{ margin: 0 }}>
+                        {msg.content}<span className="cursor-blink" aria-hidden="true" />
+                      </p>
+                    ) : (
+                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    )}
+                  </div>
+                );
+              })() : (
                 <p className="whitespace-pre-wrap">{msg.content}</p>
               )}
             </div>
