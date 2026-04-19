@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import {
   LogOut, Plus, Trash2, Edit2, Eye, EyeOff,
   ChevronDown, ChevronUp, CheckCircle, Copy, Link2, BookOpen, Briefcase,
-  Upload, ImageIcon, Reply, Send,
+  Upload, ImageIcon, Reply, Send, Layers, X,
 } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -20,7 +20,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@
 import { apiRequest } from '@/lib/queryClient';
 import { formatDate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
-import type { Inquiry, Project, Post, KnowledgeBaseEntry, GalleryImage } from '@shared/schema';
+import type { Inquiry, Project, Post, KnowledgeBaseEntry, GalleryImage, ProjectSection } from '@shared/schema';
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
@@ -355,6 +355,259 @@ function EnquiriesTab() {
 
 // ── Portfolio tab ─────────────────────────────────────────────────────────────
 
+function SectionEditor({
+  initial,
+  onSave,
+  onCancel,
+  saving,
+}: {
+  initial?: Partial<ProjectSection>;
+  onSave: (data: { title: string; body: string; imageUrls: string[]; displayOrder: number }) => void;
+  onCancel: () => void;
+  saving?: boolean;
+}) {
+  const [title, setTitle] = useState(initial?.title ?? '');
+  const [body, setBody] = useState(initial?.body ?? '');
+  const [imageUrls, setImageUrls] = useState<string[]>(initial?.imageUrls ?? []);
+  const [displayOrder, setDisplayOrder] = useState(initial?.displayOrder ?? 0);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      const response = await fetch('/api/admin/gallery/upload', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error('Upload failed');
+      const img = await response.json() as { id: number };
+      const url = `/api/gallery/images/${img.id}`;
+      setImageUrls(prev => [...prev, url]);
+    } catch {
+      setUploadError('Upload failed — try again');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
+  return (
+    <div className="space-y-4 border border-border rounded-[var(--radius)] bg-muted/20 p-4">
+      <div className="grid grid-cols-4 gap-4">
+        <div className="col-span-3 space-y-1.5">
+          <Label>Section title</Label>
+          <Input
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            placeholder="e.g. The challenge, What we built, Results"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Order</Label>
+          <Input
+            type="number"
+            value={displayOrder}
+            onChange={e => setDisplayOrder(parseInt(e.target.value, 10) || 0)}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Write-up (markdown supported)</Label>
+        <Textarea
+          value={body}
+          onChange={e => setBody(e.target.value)}
+          rows={6}
+          placeholder="Describe this aspect of the project…"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label>Photos for this section</Label>
+        {imageUrls.length > 0 && (
+          <div className="flex flex-wrap gap-3">
+            {imageUrls.map((url, idx) => (
+              <div key={idx} className="relative group w-24 h-20 rounded-[var(--radius)] overflow-hidden border border-border">
+                <img src={url} alt="" className="w-full h-full object-cover" />
+                <button
+                  onClick={() => setImageUrls(prev => prev.filter((_, i) => i !== idx))}
+                  className="absolute top-1 right-1 h-5 w-5 flex items-center justify-center rounded-full bg-background/80 text-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X size={10} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleUpload}
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-[var(--radius)] border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors cursor-pointer disabled:opacity-50"
+          >
+            <Upload size={11} />
+            {uploading ? 'Uploading…' : 'Upload photo'}
+          </button>
+          {uploadError && <p className="text-xs text-destructive mt-1">{uploadError}</p>}
+        </div>
+      </div>
+
+      <div className="flex gap-2 pt-1">
+        <Button
+          size="sm"
+          onClick={() => onSave({ title, body, imageUrls, displayOrder })}
+          disabled={!title.trim() || saving}
+        >
+          {saving ? 'Saving…' : 'Save section'}
+        </Button>
+        <Button size="sm" variant="outline" onClick={onCancel} disabled={saving}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function SectionsPanel({ projectId }: { projectId: number }) {
+  const qc = useQueryClient();
+  const [addingNew, setAddingNew] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+
+  const { data: sections = [], isLoading } = useQuery<ProjectSection[]>({
+    queryKey: ['admin', 'sections', projectId],
+    queryFn: () => apiRequest<ProjectSection[]>('GET', `/api/admin/projects/${projectId}/sections`),
+  });
+
+  const createSection = useMutation({
+    mutationFn: (data: object) =>
+      apiRequest('POST', `/api/admin/projects/${projectId}/sections`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'sections', projectId] });
+      setAddingNew(false);
+    },
+  });
+
+  const updateSection = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: object }) =>
+      apiRequest('PATCH', `/api/admin/projects/${projectId}/sections/${id}`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'sections', projectId] });
+      setEditingId(null);
+    },
+  });
+
+  const deleteSection = useMutation({
+    mutationFn: (id: number) =>
+      apiRequest('DELETE', `/api/admin/projects/${projectId}/sections/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'sections', projectId] });
+    },
+  });
+
+  return (
+    <div className="border-t border-border bg-muted/10 px-4 py-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <h4 className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+          Project Sections
+        </h4>
+        {!addingNew && (
+          <button
+            onClick={() => setAddingNew(true)}
+            className="flex items-center gap-1.5 px-3 py-1 text-xs rounded-[var(--radius)] border border-primary/40 text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+          >
+            <Plus size={11} />
+            Add section
+          </button>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2">
+          {[...Array(2)].map((_, i) => (
+            <div key={i} className="h-10 bg-muted animate-pulse rounded-[var(--radius)]" />
+          ))}
+        </div>
+      ) : sections.length === 0 && !addingNew ? (
+        <p className="text-xs text-muted-foreground py-2">
+          No sections yet. Add one to enrich this project's detail page.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {sections.map(section => (
+            <div key={section.id} className="border border-border rounded-[var(--radius)] bg-card overflow-hidden">
+              {editingId === section.id ? (
+                <div className="p-3">
+                  <SectionEditor
+                    initial={section}
+                    onSave={data => updateSection.mutate({ id: section.id, data })}
+                    onCancel={() => setEditingId(null)}
+                    saving={updateSection.isPending}
+                  />
+                </div>
+              ) : (
+                <div className="flex items-start justify-between px-3 py-2 gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-sm text-foreground truncate">{section.title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                      {section.body ? section.body.slice(0, 80) + (section.body.length > 80 ? '…' : '') : 'No write-up yet'}
+                    </p>
+                    {(section.imageUrls ?? []).length > 0 && (
+                      <p className="text-[10px] font-mono text-muted-foreground mt-1">
+                        {section.imageUrls!.length} photo{section.imageUrls!.length > 1 ? 's' : ''}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => setEditingId(section.id)}
+                      className="h-7 w-7 flex items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <Edit2 size={12} />
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (confirm(`Delete section "${section.title}"?`)) {
+                          deleteSection.mutate(section.id);
+                        }
+                      }}
+                      className="h-7 w-7 flex items-center justify-center rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {addingNew && (
+        <SectionEditor
+          onSave={data => createSection.mutate(data)}
+          onCancel={() => setAddingNew(false)}
+          saving={createSection.isPending}
+        />
+      )}
+    </div>
+  );
+}
+
 function ProjectForm({
   initial,
   onSave,
@@ -456,6 +709,7 @@ function PortfolioTab() {
   const qc = useQueryClient();
   const [editProject, setEditProject] = useState<Project | null>(null);
   const [addingNew, setAddingNew] = useState(false);
+  const [sectionsOpenFor, setSectionsOpenFor] = useState<number | null>(null);
 
   const { data: projects = [], isLoading } = useQuery<Project[]>({
     queryKey: ['admin', 'projects'],
@@ -527,34 +781,52 @@ function PortfolioTab() {
                   />
                 </div>
               ) : (
-                <div className="flex items-center justify-between px-4 py-3">
-                  <div className="min-w-0">
-                    <p className="font-medium text-sm text-foreground truncate">{project.title}</p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {project.client ?? 'No client'} · /{project.slug}
-                    </p>
+                <>
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm text-foreground truncate">{project.title}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {project.client ?? 'No client'} · /{project.slug}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 ml-4 flex-shrink-0">
+                      <button
+                        onClick={() => setSectionsOpenFor(sectionsOpenFor === project.id ? null : project.id)}
+                        className={cn(
+                          'flex items-center gap-1 px-2 h-7 text-xs rounded-[var(--radius)] border transition-colors cursor-pointer',
+                          sectionsOpenFor === project.id
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                        )}
+                        aria-label="Manage sections"
+                      >
+                        <Layers size={11} />
+                        Sections
+                      </button>
+                      <button
+                        onClick={() => setEditProject(project)}
+                        className="h-7 w-7 flex items-center justify-center rounded-[var(--radius)] hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        aria-label="Edit project"
+                      >
+                        <Edit2 size={13} />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm(`Delete "${project.title}"?`)) {
+                            deleteProject.mutate(project.id);
+                          }
+                        }}
+                        className="h-7 w-7 flex items-center justify-center rounded-[var(--radius)] hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                        aria-label="Delete project"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 ml-4 flex-shrink-0">
-                    <button
-                      onClick={() => setEditProject(project)}
-                      className="h-7 w-7 flex items-center justify-center rounded-[var(--radius)] hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                      aria-label="Edit project"
-                    >
-                      <Edit2 size={13} />
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (confirm(`Delete "${project.title}"?`)) {
-                          deleteProject.mutate(project.id);
-                        }
-                      }}
-                      className="h-7 w-7 flex items-center justify-center rounded-[var(--radius)] hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                      aria-label="Delete project"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                </div>
+                  {sectionsOpenFor === project.id && (
+                    <SectionsPanel projectId={project.id} />
+                  )}
+                </>
               )}
             </div>
           ))}

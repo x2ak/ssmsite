@@ -1,7 +1,7 @@
 import { db } from './db';
-import { inquiries, projects, posts, adminUsers, knowledgeBase, galleryImages } from '../shared/schema';
+import { inquiries, projects, posts, adminUsers, knowledgeBase, galleryImages, projectSections } from '../shared/schema';
 import { eq, desc, asc } from 'drizzle-orm';
-import type { InsertInquiry, InsertProject, InsertPost, Inquiry, Project, Post, KnowledgeBaseEntry, InsertKnowledgeBaseEntry, GalleryImage, InsertGalleryImage } from '../shared/schema';
+import type { InsertInquiry, InsertProject, InsertPost, Inquiry, Project, Post, KnowledgeBaseEntry, InsertKnowledgeBaseEntry, GalleryImage, InsertGalleryImage, ProjectSection, InsertProjectSection } from '../shared/schema';
 
 // ── Enquiries ─────────────────────────────────────────────────────────────────
 
@@ -139,6 +139,34 @@ export async function createGalleryImage(data: InsertGalleryImage): Promise<Gall
 export async function deleteGalleryImageRecord(id: number): Promise<GalleryImage | undefined> {
   const [img] = await db.delete(galleryImages).where(eq(galleryImages.id, id)).returning();
   return img;
+}
+
+// ── Project sections ──────────────────────────────────────────────────────────
+
+export async function getSectionsByProjectId(projectId: number): Promise<ProjectSection[]> {
+  return db
+    .select()
+    .from(projectSections)
+    .where(eq(projectSections.projectId, projectId))
+    .orderBy(asc(projectSections.displayOrder), asc(projectSections.createdAt));
+}
+
+export async function createProjectSection(data: InsertProjectSection): Promise<ProjectSection> {
+  const [section] = await db.insert(projectSections).values(data).returning();
+  return section;
+}
+
+export async function updateProjectSection(id: number, data: Partial<InsertProjectSection>): Promise<ProjectSection> {
+  const [section] = await db
+    .update(projectSections)
+    .set(data)
+    .where(eq(projectSections.id, id))
+    .returning();
+  return section;
+}
+
+export async function deleteProjectSection(id: number): Promise<void> {
+  await db.delete(projectSections).where(eq(projectSections.id, id));
 }
 
 // ── Admin users ───────────────────────────────────────────────────────────────

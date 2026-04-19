@@ -6,7 +6,7 @@ import { ArrowLeft, ExternalLink } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { Badge } from '@/components/ui/badge';
 import { apiRequest } from '@/lib/queryClient';
-import type { Project } from '@shared/schema';
+import type { Project, ProjectSection } from '@shared/schema';
 
 export default function ProjectDetail() {
   const [, params] = useRoute('/work/:slug');
@@ -16,6 +16,12 @@ export default function ProjectDetail() {
     queryKey: ['projects', slug],
     queryFn: () => apiRequest<Project>('GET', `/api/projects/${slug}`),
     enabled: !!slug,
+  });
+
+  const { data: sections = [] } = useQuery<ProjectSection[]>({
+    queryKey: ['projects', slug, 'sections'],
+    queryFn: () => apiRequest<ProjectSection[]>('GET', `/api/projects/${slug}/sections`),
+    enabled: !!slug && !!project,
   });
 
   return (
@@ -108,6 +114,63 @@ export default function ProjectDetail() {
             {project.longDescription && (
               <div className="prose prose-neutral dark:prose-invert max-w-none mb-12">
                 <ReactMarkdown>{project.longDescription}</ReactMarkdown>
+              </div>
+            )}
+
+            {/* Sections */}
+            {sections.length > 0 && (
+              <div className="space-y-16 mb-16">
+                {sections.map((section, i) => (
+                  <motion.section
+                    key={section.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.5, delay: i * 0.08 }}
+                  >
+                    <div className="flex items-center gap-4 mb-6">
+                      <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-primary whitespace-nowrap">
+                        {String(i + 1).padStart(2, '0')}
+                      </span>
+                      <div className="flex-1 h-px bg-border" />
+                    </div>
+                    <h2 className="font-syne font-bold text-2xl text-foreground mb-6">{section.title}</h2>
+
+                    {/* Photos */}
+                    {(section.imageUrls ?? []).length > 0 && (
+                      <div className={`grid gap-4 mb-8 ${
+                        section.imageUrls!.length === 1
+                          ? 'grid-cols-1'
+                          : section.imageUrls!.length === 2
+                          ? 'grid-cols-2'
+                          : 'grid-cols-2 lg:grid-cols-3'
+                      }`}>
+                        {section.imageUrls!.map((url, j) => (
+                          <div
+                            key={j}
+                            className={`rounded-[var(--radius)] overflow-hidden border border-border ${
+                              section.imageUrls!.length === 1 ? 'aspect-video' : 'aspect-[4/3]'
+                            }`}
+                          >
+                            <img
+                              src={url}
+                              alt={`${section.title} — photo ${j + 1}`}
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Body */}
+                    {section.body && (
+                      <div className="prose prose-neutral dark:prose-invert max-w-none">
+                        <ReactMarkdown>{section.body}</ReactMarkdown>
+                      </div>
+                    )}
+                  </motion.section>
+                ))}
               </div>
             )}
 

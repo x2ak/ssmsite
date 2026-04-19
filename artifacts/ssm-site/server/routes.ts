@@ -29,6 +29,10 @@ import {
   getGalleryImageById,
   createGalleryImage,
   deleteGalleryImageRecord,
+  getSectionsByProjectId,
+  createProjectSection,
+  updateProjectSection,
+  deleteProjectSection,
 } from './storage';
 import { uploadToGCS, streamGalleryImage, deleteFromGCS } from './imageStorage';
 import { insertInquirySchema } from '../shared/schema';
@@ -96,6 +100,18 @@ export function registerRoutes(app: Express) {
     } catch (err) {
       console.error('Error fetching project:', err);
       res.status(500).json({ error: 'Failed to fetch project' });
+    }
+  });
+
+  app.get('/api/projects/:slug/sections', async (req, res) => {
+    try {
+      const project = await getProjectBySlug(req.params.slug);
+      if (!project) { res.status(404).json({ error: 'Project not found' }); return; }
+      const sections = await getSectionsByProjectId(project.id);
+      res.json(sections);
+    } catch (err) {
+      console.error('Error fetching sections:', err);
+      res.status(500).json({ error: 'Failed to fetch sections' });
     }
   });
 
@@ -223,6 +239,51 @@ export function registerRoutes(app: Express) {
     } catch (err) {
       console.error('Error deleting project:', err);
       res.status(500).json({ error: 'Failed to delete project' });
+    }
+  });
+
+  // ── Admin — Project Sections ──────────────────────────────────────────────
+
+  app.get('/api/admin/projects/:id/sections', requireAdmin, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.id, 10);
+      const sections = await getSectionsByProjectId(projectId);
+      res.json(sections);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch sections' });
+    }
+  });
+
+  app.post('/api/admin/projects/:id/sections', requireAdmin, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.id, 10);
+      const { title, body, imageUrls, displayOrder } = req.body as {
+        title: string; body?: string; imageUrls?: string[]; displayOrder?: number;
+      };
+      const section = await createProjectSection({ projectId, title, body: body ?? '', imageUrls: imageUrls ?? [], displayOrder: displayOrder ?? 0 });
+      res.status(201).json(section);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to create section' });
+    }
+  });
+
+  app.patch('/api/admin/projects/:id/sections/:sid', requireAdmin, async (req, res) => {
+    try {
+      const sid = parseInt(req.params.sid, 10);
+      const section = await updateProjectSection(sid, req.body);
+      res.json(section);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to update section' });
+    }
+  });
+
+  app.delete('/api/admin/projects/:id/sections/:sid', requireAdmin, async (req, res) => {
+    try {
+      const sid = parseInt(req.params.sid, 10);
+      await deleteProjectSection(sid);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to delete section' });
     }
   });
 

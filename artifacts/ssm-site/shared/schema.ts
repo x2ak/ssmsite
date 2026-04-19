@@ -71,6 +71,17 @@ export const adminUsers = pgTable('admin_users', {
   passwordHash: text('password_hash').notNull(),
 });
 
+// Project sections — rich content blocks within a project detail page
+export const projectSections = pgTable('project_sections', {
+  id: serial('id').primaryKey(),
+  projectId: integer('project_id').notNull(),
+  title: text('title').notNull(),
+  body: text('body').notNull().default(''),
+  imageUrls: text('image_urls').array().default([]),
+  displayOrder: integer('display_order').default(0),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
 // Zod schemas
 export const insertKnowledgeBaseSchema = createInsertSchema(knowledgeBase);
 export const selectKnowledgeBaseSchema = createSelectSchema(knowledgeBase);
@@ -100,3 +111,5 @@ export type InsertPost = typeof posts.$inferInsert;
 export type AdminUser = typeof adminUsers.$inferSelect;
 export type GalleryImage = typeof galleryImages.$inferSelect;
 export type InsertGalleryImage = typeof galleryImages.$inferInsert;
+export type ProjectSection = typeof projectSections.$inferSelect;
+export type InsertProjectSection = typeof projectSections.$inferInsert;
