@@ -1,7 +1,7 @@
 import { db } from './db';
-import { inquiries, projects, posts, adminUsers, knowledgeBase } from '../shared/schema';
+import { inquiries, projects, posts, adminUsers, knowledgeBase, galleryImages } from '../shared/schema';
 import { eq, desc, asc } from 'drizzle-orm';
-import type { InsertInquiry, InsertProject, InsertPost, Inquiry, Project, Post, KnowledgeBaseEntry, InsertKnowledgeBaseEntry } from '../shared/schema';
+import type { InsertInquiry, InsertProject, InsertPost, Inquiry, Project, Post, KnowledgeBaseEntry, InsertKnowledgeBaseEntry, GalleryImage, InsertGalleryImage } from '../shared/schema';
 
 // ── Enquiries ─────────────────────────────────────────────────────────────────
 
@@ -114,6 +114,27 @@ export async function updateKnowledgeBaseEntry(id: number, data: Partial<InsertK
 
 export async function deleteKnowledgeBaseEntry(id: number): Promise<void> {
   await db.delete(knowledgeBase).where(eq(knowledgeBase.id, id));
+}
+
+// ── Gallery images ────────────────────────────────────────────────────────────
+
+export async function getAllGalleryImages(): Promise<GalleryImage[]> {
+  return db.select().from(galleryImages).orderBy(desc(galleryImages.createdAt));
+}
+
+export async function getGalleryImageById(id: number): Promise<GalleryImage | undefined> {
+  const [img] = await db.select().from(galleryImages).where(eq(galleryImages.id, id));
+  return img;
+}
+
+export async function createGalleryImage(data: InsertGalleryImage): Promise<GalleryImage> {
+  const [img] = await db.insert(galleryImages).values(data).returning();
+  return img;
+}
+
+export async function deleteGalleryImageRecord(id: number): Promise<GalleryImage | undefined> {
+  const [img] = await db.delete(galleryImages).where(eq(galleryImages.id, id)).returning();
+  return img;
 }
 
 // ── Admin users ───────────────────────────────────────────────────────────────

@@ -39,7 +39,18 @@ export const posts = pgTable('posts', {
   slug: text('slug').notNull().unique(),
   excerpt: text('excerpt').notNull(),
   content: text('content').notNull(),
+  imageUrl: text('image_url'),
   published: boolean('published').default(false),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Gallery — uploaded images for use in projects and posts
+export const galleryImages = pgTable('gallery_images', {
+  id: serial('id').primaryKey(),
+  filename: text('filename').notNull(),
+  objectName: text('object_name').notNull(),
+  contentType: text('content_type').notNull().default('image/jpeg'),
+  label: text('label'),
   createdAt: timestamp('created_at').defaultNow(),
 });
 
@@ -87,3 +98,5 @@ export type InsertProject = typeof projects.$inferInsert;
 export type Post = typeof posts.$inferSelect;
 export type InsertPost = typeof posts.$inferInsert;
 export type AdminUser = typeof adminUsers.$inferSelect;
+export type GalleryImage = typeof galleryImages.$inferSelect;
+export type InsertGalleryImage = typeof galleryImages.$inferInsert;

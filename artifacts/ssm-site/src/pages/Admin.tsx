@@ -4,7 +4,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import {
   LogOut, Plus, Trash2, Edit2, Eye, EyeOff,
-  ChevronDown, ChevronUp, CheckCircle, Copy, Link2, BookOpen, Briefcase
+  ChevronDown, ChevronUp, CheckCircle, Copy, Link2, BookOpen, Briefcase,
+  Upload, ImageIcon,
 } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -19,7 +20,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@
 import { apiRequest } from '@/lib/queryClient';
 import { formatDate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
-import type { Inquiry, Project, Post, KnowledgeBaseEntry } from '@shared/schema';
+import type { Inquiry, Project, Post, KnowledgeBaseEntry, GalleryImage } from '@shared/schema';
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
@@ -996,183 +997,206 @@ function AgentTab() {
 
 // ── Gallery tab ───────────────────────────────────────────────────────────────
 
-function CopyLinkButton({ url }: { url: string }) {
-  const [copied, setCopied] = useState(false);
-
-  async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2200);
-    } catch {
-      // Fallback for older browsers
-      const el = document.createElement('textarea');
-      el.value = url;
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand('copy');
-      document.body.removeChild(el);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2200);
-    }
-  }
-
-  return (
-    <motion.button
-      onClick={handleCopy}
-      whileTap={{ scale: 0.92 }}
-      className={cn(
-        'group relative flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius)] text-xs font-medium',
-        'border transition-all duration-200 cursor-pointer select-none overflow-hidden',
-        copied
-          ? 'border-emerald-400 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-600'
-          : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground bg-transparent'
-      )}
-      title={url}
-    >
-      <AnimatePresence mode="wait" initial={false}>
-        {copied ? (
-          <motion.span
-            key="check"
-            className="flex items-center gap-1.5"
-            initial={{ opacity: 0, scale: 0.5, y: 4 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.5, y: -4 }}
-            transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-          >
-            <CheckCircle size={12} />
-            Copied!
-          </motion.span>
-        ) : (
-          <motion.span
-            key="copy"
-            className="flex items-center gap-1.5"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            transition={{ duration: 0.1 }}
-          >
-            <Copy size={12} />
-            Copy link
-          </motion.span>
-        )}
-      </AnimatePresence>
-    </motion.button>
-  );
-}
-
 function GalleryTab() {
-  const { data: projects = [], isLoading: loadingProjects } = useQuery<Project[]>({
+  const qc = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [assigningId, setAssigningId] = useState<number | null>(null);
+
+  const { data: images = [], isLoading } = useQuery<GalleryImage[]>({
+    queryKey: ['admin', 'gallery'],
+    queryFn: () => apiRequest<GalleryImage[]>('GET', '/api/admin/gallery'),
+  });
+
+  const { data: projects = [] } = useQuery<Project[]>({
     queryKey: ['admin', 'projects'],
     queryFn: () => apiRequest<Project[]>('GET', '/api/admin/projects'),
   });
 
-  const { data: posts = [], isLoading: loadingPosts } = useQuery<Post[]>({
+  const { data: posts = [] } = useQuery<Post[]>({
     queryKey: ['admin', 'posts'],
     queryFn: () => apiRequest<Post[]>('GET', '/api/admin/posts'),
   });
 
-  const base = typeof window !== 'undefined' ? window.location.origin : '';
-  const isLoading = loadingProjects || loadingPosts;
-
-  if (isLoading) {
-    return (
-      <div className="space-y-3 mt-6">
-        {[...Array(5)].map((_, i) => (
-          <div key={i} className="h-16 bg-muted animate-pulse rounded-[var(--radius)]" />
-        ))}
-      </div>
-    );
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('image', file);
+      const res = await fetch('/api/admin/gallery/upload', {
+        method: 'POST',
+        body: fd,
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || 'Upload failed');
+      }
+      await qc.invalidateQueries({ queryKey: ['admin', 'gallery'] });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   }
 
-  const Section = ({
-    title,
-    icon: Icon,
-    items,
-    type,
-  }: {
-    title: string;
-    icon: React.ElementType;
-    items: Array<{ id: number; title: string; slug: string; tags?: string[] | null; featured?: boolean | null; published?: boolean | null }>;
-    type: 'portfolio' | 'blog';
-  }) => (
-    <div>
-      <div className="flex items-center gap-2 mb-3">
-        <Icon size={15} className="text-muted-foreground" />
-        <h3 className="font-medium text-sm text-foreground">{title}</h3>
-        <span className="text-xs text-muted-foreground">({items.length})</span>
-      </div>
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => apiRequest('DELETE', `/api/admin/gallery/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'gallery'] }),
+  });
 
-      {items.length === 0 ? (
-        <p className="text-sm text-muted-foreground py-6 text-center border border-dashed border-border rounded-[var(--radius)]">
-          No {type === 'portfolio' ? 'portfolio projects' : 'blog posts'} yet.
-        </p>
-      ) : (
-        <div className="space-y-2">
-          {items.map(item => {
-            const path = type === 'portfolio' ? `/work/${item.slug}` : `/blog/${item.slug}`;
-            const fullUrl = `${base}${path}`;
-            const isLive = type === 'portfolio' ? true : item.published;
+  async function assignToProject(imageId: number, projectId: string) {
+    if (!projectId) return;
+    setAssigningId(imageId);
+    try {
+      await apiRequest('PATCH', `/api/admin/projects/${projectId}`, { imageUrl: `/api/gallery/images/${imageId}` });
+      await qc.invalidateQueries({ queryKey: ['admin', 'projects'] });
+    } finally {
+      setAssigningId(null);
+    }
+  }
 
-            return (
-              <div
-                key={item.id}
-                className="flex items-center justify-between gap-4 px-4 py-3 rounded-[var(--radius)] border border-border bg-card hover:bg-muted/30 transition-colors"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium text-foreground truncate">
-                        {item.title}
-                      </span>
-                      {type === 'blog' && (
-                        <span className={cn(
-                          'text-xs px-1.5 py-0.5 rounded-full',
-                          isLive
-                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                            : 'bg-muted text-muted-foreground'
-                        )}>
-                          {isLive ? 'published' : 'draft'}
-                        </span>
-                      )}
-                      {type === 'portfolio' && item.featured && (
-                        <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                          featured
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <Link2 size={10} className="text-muted-foreground/50 flex-shrink-0" />
-                      <span className="text-xs text-muted-foreground truncate font-mono">
-                        {path}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+  async function assignToPost(imageId: number, postId: string) {
+    setAssigningId(imageId);
+    try {
+      if (postId) {
+        await apiRequest('PATCH', `/api/admin/posts/${postId}`, { imageUrl: `/api/gallery/images/${imageId}` });
+      }
+      await qc.invalidateQueries({ queryKey: ['admin', 'posts'] });
+    } finally {
+      setAssigningId(null);
+    }
+  }
 
-                <CopyLinkButton url={fullUrl} />
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
+  function currentProjectId(imageId: number): string {
+    const url = `/api/gallery/images/${imageId}`;
+    return String(projects.find(p => p.imageUrl === url)?.id ?? '');
+  }
+
+  function currentPostId(imageId: number): string {
+    const url = `/api/gallery/images/${imageId}`;
+    return String((posts as Array<Post & { imageUrl?: string | null }>).find(p => p.imageUrl === url)?.id ?? '');
+  }
 
   return (
-    <div className="mt-6 space-y-8">
-      <Section
-        title="Portfolio"
-        icon={Briefcase}
-        items={projects}
-        type="portfolio"
-      />
-      <Section
-        title="Blog posts"
-        icon={BookOpen}
-        items={posts}
-        type="blog"
-      />
+    <div className="mt-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-base font-semibold text-foreground">Image library</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Upload photos and assign them to Work projects or Blog posts.
+          </p>
+        </div>
+        <div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+          <Button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            size="sm"
+          >
+            <Upload size={14} />
+            {uploading ? 'Uploading…' : 'Upload image'}
+          </Button>
+        </div>
+      </div>
+
+      {/* Image grid */}
+      {isLoading ? (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="aspect-[4/3] bg-muted animate-pulse rounded-[var(--radius)]" />
+          ))}
+        </div>
+      ) : images.length === 0 ? (
+        <div
+          className="border-2 border-dashed border-border rounded-[var(--radius)] py-20 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-primary/40 transition-colors"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <ImageIcon size={36} className="text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground">No images yet — click to upload your first photo</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {images.map(img => (
+            <div key={img.id} className="border border-border rounded-[var(--radius)] overflow-hidden bg-card group flex flex-col">
+              {/* Thumbnail */}
+              <div className="relative aspect-[4/3] bg-muted overflow-hidden flex-shrink-0">
+                <img
+                  src={`/api/gallery/images/${img.id}`}
+                  alt={img.filename}
+                  className="w-full h-full object-cover"
+                />
+                <button
+                  onClick={() => {
+                    if (window.confirm('Delete this image? This cannot be undone.')) {
+                      deleteMutation.mutate(img.id);
+                    }
+                  }}
+                  className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 cursor-pointer"
+                  title="Delete image"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+
+              {/* Filename + assign controls */}
+              <div className="p-3 space-y-3 flex-1">
+                <p className="text-[11px] text-muted-foreground truncate" title={img.filename}>
+                  {img.filename}
+                </p>
+
+                {/* Assign to Work project */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-foreground flex items-center gap-1">
+                    <Briefcase size={10} />
+                    My Work
+                  </label>
+                  <select
+                    className="w-full text-[11px] rounded-[var(--radius)] border border-border bg-background text-foreground px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary/50 cursor-pointer"
+                    value={currentProjectId(img.id)}
+                    disabled={assigningId === img.id}
+                    onChange={e => assignToProject(img.id, e.target.value)}
+                  >
+                    <option value="">— not assigned —</option>
+                    {projects.map(p => (
+                      <option key={p.id} value={p.id}>{p.title}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Assign to Blog post */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-foreground flex items-center gap-1">
+                    <BookOpen size={10} />
+                    Blog
+                  </label>
+                  <select
+                    className="w-full text-[11px] rounded-[var(--radius)] border border-border bg-background text-foreground px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary/50 cursor-pointer"
+                    value={currentPostId(img.id)}
+                    disabled={assigningId === img.id}
+                    onChange={e => assignToPost(img.id, e.target.value)}
+                  >
+                    <option value="">— not assigned —</option>
+                    {posts.map(p => (
+                      <option key={p.id} value={p.id}>{p.title}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

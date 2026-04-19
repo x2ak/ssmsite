@@ -1,4 +1,5 @@
 import type { Express } from 'express';
+import multer from 'multer';
 import { requireAdmin } from './auth';
 import { handleChat } from './chat';
 import { sendEnquiryNotification, sendEnquiryConfirmation } from './email';
@@ -22,9 +23,16 @@ import {
   deleteKnowledgeBaseEntry,
   getAdminByUsername,
   updateAdminPassword,
+  getAllGalleryImages,
+  getGalleryImageById,
+  createGalleryImage,
+  deleteGalleryImageRecord,
 } from './storage';
+import { uploadToGCS, streamGalleryImage, deleteFromGCS } from './imageStorage';
 import { insertInquirySchema } from '../shared/schema';
 import bcrypt from 'bcryptjs';
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 export function registerRoutes(app: Express) {
 
@@ -315,6 +323,70 @@ export function registerRoutes(app: Express) {
     } catch (err) {
       console.error('Error changing password:', err);
       res.status(500).json({ error: 'Failed to change password' });
+    }
+  });
+
+  // ── Gallery (public image serving) ───────────────────────────────────────
+
+  app.get('/api/gallery/images/:id', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) { res.status(400).json({ error: 'Invalid id' }); return; }
+      const img = await getGalleryImageById(id);
+      if (!img) { res.status(404).end(); return; }
+      await streamGalleryImage(img.objectName, res);
+    } catch (err) {
+      console.error('Error serving gallery image:', err);
+      if (!res.headersSent) res.status(500).end();
+    }
+  });
+
+  // ── Gallery admin ─────────────────────────────────────────────────────────
+
+  app.get('/api/admin/gallery', requireAdmin, async (_req, res) => {
+    try {
+      const images = await getAllGalleryImages();
+      res.json(images);
+    } catch (err) {
+      console.error('Error fetching gallery:', err);
+      res.status(500).json({ error: 'Failed to fetch gallery' });
+    }
+  });
+
+  app.post('/api/admin/gallery/upload', requireAdmin, upload.single('image'), async (req, res) => {
+    try {
+      const file = req.file;
+      if (!file) { res.status(400).json({ error: 'No file provided' }); return; }
+      const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml'];
+      if (!allowed.includes(file.mimetype)) {
+        res.status(400).json({ error: 'Only image files are allowed' }); return;
+      }
+      const objectName = await uploadToGCS(file.buffer, file.originalname, file.mimetype);
+      const label = (req.body?.label as string | undefined) || '';
+      const img = await createGalleryImage({
+        filename: file.originalname,
+        objectName,
+        contentType: file.mimetype,
+        label: label || null,
+      });
+      res.status(201).json(img);
+    } catch (err) {
+      console.error('Error uploading image:', err);
+      res.status(500).json({ error: 'Upload failed' });
+    }
+  });
+
+  app.delete('/api/admin/gallery/:id', requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) { res.status(400).json({ error: 'Invalid id' }); return; }
+      const img = await deleteGalleryImageRecord(id);
+      if (!img) { res.status(404).json({ error: 'Image not found' }); return; }
+      await deleteFromGCS(img.objectName);
+      res.json({ success: true });
+    } catch (err) {
+      console.error('Error deleting gallery image:', err);
+      res.status(500).json({ error: 'Delete failed' });
     }
   });
 }
