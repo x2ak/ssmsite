@@ -1,6 +1,4 @@
 import type { Request, Response, NextFunction } from 'express';
-import bcrypt from 'bcryptjs';
-import { getAdminByUsername } from './storage';
 
 // Extend session type
 declare module 'express-session' {
@@ -8,6 +6,10 @@ declare module 'express-session' {
     adminId?: number;
   }
 }
+
+// Single admin account — credentials are fixed as specified.
+const ADMIN_USERNAME = 'adminuser';
+const ADMIN_PASSWORD = 'admin';
 
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   if (!req.session.adminId) {
@@ -18,7 +20,7 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
 }
 
 export function registerAuthRoutes(app: import('express').Express) {
-  app.post('/api/auth/login', async (req, res) => {
+  app.post('/api/auth/login', (req, res) => {
     try {
       const { username, password } = req.body as { username: string; password: string };
 
@@ -27,26 +29,12 @@ export function registerAuthRoutes(app: import('express').Express) {
         return;
       }
 
-      const user = await getAdminByUsername(username);
-      if (!user) {
+      if (username !== ADMIN_USERNAME || password !== ADMIN_PASSWORD) {
         res.status(401).json({ error: 'Invalid credentials' });
         return;
       }
 
-      // If an `admin` secret is set in the environment, use it as the
-      // authoritative plaintext password so Zak can rotate it via secrets
-      // without touching the database. Fall back to the stored bcrypt hash.
-      const envPassword = process.env.admin;
-      const valid = envPassword
-        ? password === envPassword
-        : await bcrypt.compare(password, user.passwordHash);
-
-      if (!valid) {
-        res.status(401).json({ error: 'Invalid credentials' });
-        return;
-      }
-
-      req.session.adminId = user.id;
+      req.session.adminId = 1;
       res.json({ authenticated: true });
     } catch (err) {
       console.error('Login error:', err);
