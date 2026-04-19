@@ -4,8 +4,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import {
   LogOut, Plus, Trash2, Edit2, Eye, EyeOff,
-  ChevronDown, ChevronUp, CheckCircle
+  ChevronDown, ChevronUp, CheckCircle, Copy, Link2, BookOpen, Briefcase
 } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -993,6 +994,189 @@ function AgentTab() {
   );
 }
 
+// ── Gallery tab ───────────────────────────────────────────────────────────────
+
+function CopyLinkButton({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2200);
+    } catch {
+      // Fallback for older browsers
+      const el = document.createElement('textarea');
+      el.value = url;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2200);
+    }
+  }
+
+  return (
+    <motion.button
+      onClick={handleCopy}
+      whileTap={{ scale: 0.92 }}
+      className={cn(
+        'group relative flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius)] text-xs font-medium',
+        'border transition-all duration-200 cursor-pointer select-none overflow-hidden',
+        copied
+          ? 'border-emerald-400 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-600'
+          : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground bg-transparent'
+      )}
+      title={url}
+    >
+      <AnimatePresence mode="wait" initial={false}>
+        {copied ? (
+          <motion.span
+            key="check"
+            className="flex items-center gap-1.5"
+            initial={{ opacity: 0, scale: 0.5, y: 4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.5, y: -4 }}
+            transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+          >
+            <CheckCircle size={12} />
+            Copied!
+          </motion.span>
+        ) : (
+          <motion.span
+            key="copy"
+            className="flex items-center gap-1.5"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ duration: 0.1 }}
+          >
+            <Copy size={12} />
+            Copy link
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </motion.button>
+  );
+}
+
+function GalleryTab() {
+  const { data: projects = [], isLoading: loadingProjects } = useQuery<Project[]>({
+    queryKey: ['admin', 'projects'],
+    queryFn: () => apiRequest<Project[]>('GET', '/api/admin/projects'),
+  });
+
+  const { data: posts = [], isLoading: loadingPosts } = useQuery<Post[]>({
+    queryKey: ['admin', 'posts'],
+    queryFn: () => apiRequest<Post[]>('GET', '/api/admin/posts'),
+  });
+
+  const base = typeof window !== 'undefined' ? window.location.origin : '';
+  const isLoading = loadingProjects || loadingPosts;
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3 mt-6">
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="h-16 bg-muted animate-pulse rounded-[var(--radius)]" />
+        ))}
+      </div>
+    );
+  }
+
+  const Section = ({
+    title,
+    icon: Icon,
+    items,
+    type,
+  }: {
+    title: string;
+    icon: React.ElementType;
+    items: Array<{ id: number; title: string; slug: string; tags?: string[] | null; featured?: boolean | null; published?: boolean | null }>;
+    type: 'portfolio' | 'blog';
+  }) => (
+    <div>
+      <div className="flex items-center gap-2 mb-3">
+        <Icon size={15} className="text-muted-foreground" />
+        <h3 className="font-medium text-sm text-foreground">{title}</h3>
+        <span className="text-xs text-muted-foreground">({items.length})</span>
+      </div>
+
+      {items.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-6 text-center border border-dashed border-border rounded-[var(--radius)]">
+          No {type === 'portfolio' ? 'portfolio projects' : 'blog posts'} yet.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {items.map(item => {
+            const path = type === 'portfolio' ? `/work/${item.slug}` : `/blog/${item.slug}`;
+            const fullUrl = `${base}${path}`;
+            const isLive = type === 'portfolio' ? true : item.published;
+
+            return (
+              <div
+                key={item.id}
+                className="flex items-center justify-between gap-4 px-4 py-3 rounded-[var(--radius)] border border-border bg-card hover:bg-muted/30 transition-colors"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium text-foreground truncate">
+                        {item.title}
+                      </span>
+                      {type === 'blog' && (
+                        <span className={cn(
+                          'text-xs px-1.5 py-0.5 rounded-full',
+                          isLive
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                            : 'bg-muted text-muted-foreground'
+                        )}>
+                          {isLive ? 'published' : 'draft'}
+                        </span>
+                      )}
+                      {type === 'portfolio' && item.featured && (
+                        <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                          featured
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <Link2 size={10} className="text-muted-foreground/50 flex-shrink-0" />
+                      <span className="text-xs text-muted-foreground truncate font-mono">
+                        {path}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <CopyLinkButton url={fullUrl} />
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="mt-6 space-y-8">
+      <Section
+        title="Portfolio"
+        icon={Briefcase}
+        items={projects}
+        type="portfolio"
+      />
+      <Section
+        title="Blog posts"
+        icon={BookOpen}
+        items={posts}
+        type="blog"
+      />
+    </div>
+  );
+}
+
 // ── Main Admin shell ──────────────────────────────────────────────────────────
 
 export default function Admin() {
@@ -1050,6 +1234,7 @@ export default function Admin() {
             <TabsTrigger value="enquiries">Enquiries</TabsTrigger>
             <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
             <TabsTrigger value="blog">Blog</TabsTrigger>
+            <TabsTrigger value="gallery">Gallery</TabsTrigger>
             <TabsTrigger value="agent">Agent</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
@@ -1061,6 +1246,9 @@ export default function Admin() {
           </TabsContent>
           <TabsContent value="blog">
             <BlogTab />
+          </TabsContent>
+          <TabsContent value="gallery">
+            <GalleryTab />
           </TabsContent>
           <TabsContent value="agent">
             <AgentTab />
