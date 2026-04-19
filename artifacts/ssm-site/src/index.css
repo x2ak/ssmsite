@@ -71,6 +71,7 @@
 
 html {
   scroll-behavior: smooth;
+  background-color: var(--background);
 }
 
 body {
@@ -84,13 +85,6 @@ body {
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-/* Dark mode subtle grid overlay */
-[data-theme="dark"] body {
-  background-image:
-    linear-gradient(hsl(185 100% 50% / 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, hsl(185 100% 50% / 0.04) 1px, transparent 1px);
-  background-size: 60px 60px;
-}
 
 h1, h2, h3, h4, h5, h6 {
   font-family: 'Syne', sans-serif;

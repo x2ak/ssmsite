@@ -171,6 +171,7 @@ export function NetworkBackground() {
     const isDark = theme === 'dark';
     const [h, s, l] = isDark ? [185, 100, 50] : [185, 100, 38];
     const p = (a: number) => `hsla(${h},${s}%,${l}%,${a})`;
+    const bgRgb = isDark ? '10,10,10' : '247,247,247';
 
     const landFill   = isDark ? 'rgba(255,255,255,0.022)' : 'rgba(0,0,0,0.025)';
     const borderColor = isDark ? 'rgba(255,255,255,0.13)'  : 'rgba(0,0,0,0.16)';
@@ -205,7 +206,14 @@ export function NetworkBackground() {
       const H = canvas.offsetHeight;
       ctx.clearRect(0, 0, W, H);
 
-      // Country outlines
+      // Country outlines — clip to safe zone; CLIP_TOP must match fadeH so borders
+      // never appear inside the gradient fade region
+      const CLIP_TOP = 160;
+      const CLIP_BOT = 60;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, CLIP_TOP, W, H - CLIP_TOP - CLIP_BOT);
+      ctx.clip();
       geoRef.current.forEach(f => {
         if (!f.geometry) return;
         ctx.beginPath();
@@ -216,6 +224,7 @@ export function NetworkBackground() {
         ctx.lineWidth   = 0.6;
         ctx.stroke();
       });
+      ctx.restore();
 
       // City positions
       const pts    = CITIES.map(c => project(c.lon, c.lat, W, H));
@@ -274,6 +283,20 @@ export function NetworkBackground() {
         pk.t += pk.speed;
         if (pk.t >= 1) { pk.t = 0; pk.fwd = !pk.fwd; }
       });
+
+      // Fade edges so country borders never create hard lines against the page
+      const fadeH = 160;
+      const topFade = ctx.createLinearGradient(0, 0, 0, fadeH);
+      topFade.addColorStop(0, `rgba(${bgRgb},1)`);
+      topFade.addColorStop(1, `rgba(${bgRgb},0)`);
+      ctx.fillStyle = topFade;
+      ctx.fillRect(0, 0, W, fadeH);
+
+      const botFade = ctx.createLinearGradient(0, H - fadeH, 0, H);
+      botFade.addColorStop(0, `rgba(${bgRgb},0)`);
+      botFade.addColorStop(1, `rgba(${bgRgb},1)`);
+      ctx.fillStyle = botFade;
+      ctx.fillRect(0, H - fadeH, W, fadeH);
 
       rafRef.current = requestAnimationFrame(draw);
     }
