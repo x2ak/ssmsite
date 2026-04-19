@@ -54,9 +54,9 @@ const EU_IDS = new Set([
   826, // United Kingdom
 ]);
 
-// European cities for network overlay — London is hub
+// European cities for network overlay — Birmingham is hub (SSM-LTD HQ)
 const CITIES = [
-  { name: 'London',    lat: 51.5,  lon: -0.12, hub: true },
+  { name: 'Birmingham', lat: 52.48, lon: -1.90, hub: true },
   { name: 'Paris',     lat: 48.85, lon:  2.35           },
   { name: 'Berlin',    lat: 52.52, lon: 13.41           },
   { name: 'Madrid',    lat: 40.42, lon: -3.70           },
@@ -69,10 +69,13 @@ const CITIES = [
   { name: 'Dublin',    lat: 53.33, lon: -6.25           },
 ];
 
-// Europe bounding box — LAT_MAX=67 keeps Norway's Arctic coastline off the top
-// of the canvas so it never creates a visible horizontal line artefact
+// Geographic bounds used for scale calculation
 const LON_MIN = -14, LON_MAX = 42;
 const LAT_MIN =  34, LAT_MAX = 67;
+
+// Viewport centre — shifted west from the bounding-box midpoint so that
+// Western Europe (UK, France, Germany) is centred on both desktop and mobile
+const CENTER_LON = 2;   // degrees
 
 function mercY(lat: number) {
   return Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
@@ -92,9 +95,11 @@ function project(lon: number, lat: number, W: number, H: number, pad = 0.04): Po
 
   const scaleX = usableW / (MX_MAX - MX_MIN);
   const scaleY = usableH / (MY_MAX - MY_MIN);
-  const scale  = Math.min(scaleX, scaleY);
+  // Portrait (mobile): cover — fill height so there are no empty letterbox bands.
+  // Landscape (desktop): fit — show the whole continent without overflow.
+  const scale  = W < H ? Math.max(scaleX, scaleY) : Math.min(scaleX, scaleY);
 
-  const mxCen = (MX_MIN + MX_MAX) / 2;
+  const mxCen = (CENTER_LON * Math.PI) / 180;
   const myCen = (MY_MIN + MY_MAX) / 2;
 
   return {

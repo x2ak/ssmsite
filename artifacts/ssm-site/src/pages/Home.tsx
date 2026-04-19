@@ -60,7 +60,7 @@ export default function Home() {
       </header>
 
       {/* Main content — vertically centred */}
-      <main className="flex-1 flex flex-col items-center justify-center px-6 py-24">
+      <main className="flex-1 flex flex-col items-center justify-center px-6 py-24 relative z-10">
         <div className="w-full max-w-[680px]">
           {/* Brand label */}
           <motion.div
