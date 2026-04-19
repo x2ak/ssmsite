@@ -16,7 +16,7 @@ interface Message {
 }
 
 const INTRO =
-  "Hi, I'm Zak! I specialise in helping businesses redesign their online presence — bespoke websites and secure network infrastructure. What are you working on?";
+  "Hey — I'm Zak's assistant. He's out doing the actual work, so I'm here to figure out what you need. What are you working on?";
 
 class ChatErrorBoundary extends Error {}
 
