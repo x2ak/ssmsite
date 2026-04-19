@@ -10,8 +10,13 @@ import { registerRoutes } from './routes';
 const distDir = path.resolve(process.cwd(), 'dist/public');
 
 const app = express();
-const PORT = process.env.BACKEND_PORT || 5000;
 const isProd = process.env.NODE_ENV === 'production';
+
+// In production Replit assigns PORT dynamically — the server MUST bind to it.
+// In development the Vite proxy expects the backend on BACKEND_PORT (5000).
+const PORT = isProd
+  ? (process.env.PORT || 3000)
+  : (process.env.BACKEND_PORT || 5000);
 
 // ── Middleware ────────────────────────────────────────────────────────────────
 
