@@ -26,6 +26,7 @@ export const projects = pgTable('projects', {
   longDescription: text('long_description'),
   tags: text('tags').array(),
   imageUrl: text('image_url'),
+  imageUrls: text('image_urls').array().default([]),
   liveUrl: text('live_url'),
   featured: boolean('featured').default(false),
   order: integer('order').default(0),
@@ -78,6 +79,7 @@ export const projectSections = pgTable('project_sections', {
   title: text('title').notNull(),
   body: text('body').notNull().default(''),
   imageUrls: text('image_urls').array().default([]),
+  layout: text('layout').notNull().default('text-above'),
   displayOrder: integer('display_order').default(0),
   createdAt: timestamp('created_at').defaultNow(),
 });

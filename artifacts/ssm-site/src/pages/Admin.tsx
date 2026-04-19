@@ -355,6 +355,12 @@ function EnquiriesTab() {
 
 // ── Portfolio tab ─────────────────────────────────────────────────────────────
 
+const LAYOUT_OPTIONS = [
+  { value: 'text-above',   label: 'Text above, photos below' },
+  { value: 'photos-above', label: 'Photos above, text below' },
+  { value: 'side-by-side', label: 'Side by side (text left, photos right)' },
+] as const;
+
 function SectionEditor({
   initial,
   onSave,
@@ -362,13 +368,14 @@ function SectionEditor({
   saving,
 }: {
   initial?: Partial<ProjectSection>;
-  onSave: (data: { title: string; body: string; imageUrls: string[]; displayOrder: number }) => void;
+  onSave: (data: { title: string; body: string; imageUrls: string[]; displayOrder: number; layout: string }) => void;
   onCancel: () => void;
   saving?: boolean;
 }) {
   const [title, setTitle] = useState(initial?.title ?? '');
   const [body, setBody] = useState(initial?.body ?? '');
   const [imageUrls, setImageUrls] = useState<string[]>(initial?.imageUrls ?? []);
+  const [layout, setLayout] = useState(initial?.layout ?? 'text-above');
   const [displayOrder, setDisplayOrder] = useState(initial?.displayOrder ?? 0);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -421,6 +428,15 @@ function SectionEditor({
       </div>
 
       <div className="space-y-1.5">
+        <Label>Layout</Label>
+        <Select value={layout} onChange={e => setLayout(e.target.value)}>
+          {LAYOUT_OPTIONS.map(opt => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </Select>
+      </div>
+
+      <div className="space-y-1.5">
         <Label>Write-up (markdown supported)</Label>
         <Textarea
           value={body}
@@ -470,7 +486,7 @@ function SectionEditor({
       <div className="flex gap-2 pt-1">
         <Button
           size="sm"
-          onClick={() => onSave({ title, body, imageUrls, displayOrder })}
+          onClick={() => onSave({ title, body, imageUrls, displayOrder, layout })}
           disabled={!title.trim() || saving}
         >
           {saving ? 'Saving…' : 'Save section'}
@@ -566,11 +582,18 @@ function SectionsPanel({ projectId }: { projectId: number }) {
                     <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
                       {section.body ? section.body.slice(0, 80) + (section.body.length > 80 ? '…' : '') : 'No write-up yet'}
                     </p>
-                    {(section.imageUrls ?? []).length > 0 && (
-                      <p className="text-[10px] font-mono text-muted-foreground mt-1">
-                        {section.imageUrls!.length} photo{section.imageUrls!.length > 1 ? 's' : ''}
-                      </p>
-                    )}
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      {(section.imageUrls ?? []).length > 0 && (
+                        <span className="text-[10px] font-mono text-muted-foreground">
+                          {section.imageUrls!.length} photo{section.imageUrls!.length > 1 ? 's' : ''}
+                        </span>
+                      )}
+                      {section.layout && section.layout !== 'text-above' && (
+                        <span className="text-[10px] font-mono text-primary/70 capitalize">
+                          {LAYOUT_OPTIONS.find(o => o.value === section.layout)?.label ?? section.layout}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button
@@ -629,15 +652,44 @@ function ProjectForm({
     longDescription: '',
     tags: [],
     imageUrl: '',
+    imageUrls: [],
     liveUrl: '',
     featured: false,
     order: 0,
     ...initial,
   });
   const [tagsInput, setTagsInput] = useState((initial?.tags ?? []).join(', '));
+  const [heroUploading, setHeroUploading] = useState(false);
+  const [heroUploadError, setHeroUploadError] = useState<string | null>(null);
+  const heroFileRef = useRef<HTMLInputElement>(null);
 
   function handleChange(field: keyof Project, value: unknown) {
     setForm(prev => ({ ...prev, [field]: value }));
+  }
+
+  async function handleHeroUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setHeroUploading(true);
+    setHeroUploadError(null);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      const response = await fetch('/api/admin/gallery/upload', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error('Upload failed');
+      const img = await response.json() as { id: number };
+      const url = `/api/gallery/images/${img.id}`;
+      setForm(prev => ({ ...prev, imageUrls: [...(prev.imageUrls ?? []), url] }));
+    } catch {
+      setHeroUploadError('Upload failed — try again');
+    } finally {
+      setHeroUploading(false);
+      if (heroFileRef.current) heroFileRef.current.value = '';
+    }
   }
 
   function handleSave() {
@@ -682,14 +734,49 @@ function ProjectForm({
           <Input type="number" value={form.order ?? 0} onChange={e => handleChange('order', parseInt(e.target.value, 10))} />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label>Image URL</Label>
-          <Input value={form.imageUrl ?? ''} onChange={e => handleChange('imageUrl', e.target.value)} />
+      <div className="space-y-1.5">
+        <Label>Live URL</Label>
+        <Input value={form.liveUrl ?? ''} onChange={e => handleChange('liveUrl', e.target.value)} placeholder="https://…" />
+      </div>
+
+      {/* Hero carousel images */}
+      <div className="space-y-2">
+        <Label>Hero images (carousel on project page)</Label>
+        <p className="text-xs text-muted-foreground">
+          Upload multiple images for a slideshow. First image is used as thumbnail on the work grid. Leave empty to use a plain URL below.
+        </p>
+        {(form.imageUrls ?? []).length > 0 && (
+          <div className="flex flex-wrap gap-3">
+            {(form.imageUrls ?? []).map((url, idx) => (
+              <div key={idx} className="relative group w-24 h-20 rounded-[var(--radius)] overflow-hidden border border-border">
+                <img src={url} alt="" className="w-full h-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setForm(prev => ({ ...prev, imageUrls: (prev.imageUrls ?? []).filter((_, i) => i !== idx) }))}
+                  className="absolute top-1 right-1 h-5 w-5 flex items-center justify-center rounded-full bg-background/80 text-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X size={10} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div>
+          <input ref={heroFileRef} type="file" accept="image/*" onChange={handleHeroUpload} className="hidden" />
+          <button
+            type="button"
+            onClick={() => heroFileRef.current?.click()}
+            disabled={heroUploading}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-[var(--radius)] border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors cursor-pointer disabled:opacity-50"
+          >
+            <Upload size={11} />
+            {heroUploading ? 'Uploading…' : 'Upload hero image'}
+          </button>
+          {heroUploadError && <p className="text-xs text-destructive mt-1">{heroUploadError}</p>}
         </div>
-        <div className="space-y-1.5">
-          <Label>Live URL</Label>
-          <Input value={form.liveUrl ?? ''} onChange={e => handleChange('liveUrl', e.target.value)} />
+        <div className="space-y-1.5 pt-1">
+          <Label className="text-xs text-muted-foreground">Or paste a URL (used if no uploads above)</Label>
+          <Input value={form.imageUrl ?? ''} onChange={e => handleChange('imageUrl', e.target.value)} placeholder="https://…" />
         </div>
       </div>
       <label className="flex items-center gap-2 cursor-pointer text-sm text-foreground">

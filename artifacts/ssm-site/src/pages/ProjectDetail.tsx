@@ -1,12 +1,185 @@
 import { useRoute, Link } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { ArrowLeft, ExternalLink } from 'lucide-react';
+import { ArrowLeft, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { Badge } from '@/components/ui/badge';
 import { apiRequest } from '@/lib/queryClient';
 import type { Project, ProjectSection } from '@shared/schema';
+
+// ── Hero Carousel ──────────────────────────────────────────────────────────────
+
+function HeroCarousel({ images, title }: { images: string[]; title: string }) {
+  const [current, setCurrent] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const count = images.length;
+
+  const next = useCallback(() => setCurrent(c => (c + 1) % count), [count]);
+  const prev = useCallback(() => setCurrent(c => (c - 1 + count) % count), [count]);
+
+  // Auto-advance every 4 seconds
+  useEffect(() => {
+    if (count <= 1 || paused) return;
+    const id = setInterval(next, 4000);
+    return () => clearInterval(id);
+  }, [count, paused, next]);
+
+  if (count === 0) return null;
+
+  // Single image — no controls
+  if (count === 1) {
+    return (
+      <div className="w-full aspect-video rounded-[var(--radius)] overflow-hidden mb-10 border border-border">
+        <img src={images[0]} alt={title} className="w-full h-full object-cover" />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="relative w-full aspect-video rounded-[var(--radius)] overflow-hidden mb-10 border border-border group"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+    >
+      {/* Slides */}
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.img
+          key={current}
+          src={images[current]}
+          alt={`${title} — image ${current + 1}`}
+          className="absolute inset-0 w-full h-full object-cover"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.5, ease: 'easeInOut' }}
+        />
+      </AnimatePresence>
+
+      {/* Prev / Next */}
+      <button
+        type="button"
+        onClick={prev}
+        aria-label="Previous image"
+        className="absolute left-3 top-1/2 -translate-y-1/2 z-10 h-9 w-9 flex items-center justify-center rounded-full bg-background/70 text-foreground backdrop-blur-sm border border-border/60 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-background/90"
+      >
+        <ChevronLeft size={16} />
+      </button>
+      <button
+        type="button"
+        onClick={next}
+        aria-label="Next image"
+        className="absolute right-3 top-1/2 -translate-y-1/2 z-10 h-9 w-9 flex items-center justify-center rounded-full bg-background/70 text-foreground backdrop-blur-sm border border-border/60 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-background/90"
+      >
+        <ChevronRight size={16} />
+      </button>
+
+      {/* Dot indicators */}
+      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5">
+        {images.map((_, i) => (
+          <button
+            key={i}
+            type="button"
+            onClick={() => setCurrent(i)}
+            aria-label={`Go to image ${i + 1}`}
+            className={`rounded-full transition-all duration-300 ${
+              i === current
+                ? 'w-5 h-1.5 bg-primary'
+                : 'w-1.5 h-1.5 bg-white/60 hover:bg-white/90'
+            }`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Section photo grid ─────────────────────────────────────────────────────────
+
+function SectionPhotoGrid({ urls, title }: { urls: string[]; title: string }) {
+  if (urls.length === 0) return null;
+  return (
+    <div className={`grid gap-4 ${
+      urls.length === 1
+        ? 'grid-cols-1'
+        : urls.length === 2
+        ? 'grid-cols-2'
+        : 'grid-cols-2 lg:grid-cols-3'
+    }`}>
+      {urls.map((url, j) => (
+        <div
+          key={j}
+          className={`rounded-[var(--radius)] overflow-hidden border border-border ${
+            urls.length === 1 ? 'aspect-video' : 'aspect-[4/3]'
+          }`}
+        >
+          <img
+            src={url}
+            alt={`${title} — photo ${j + 1}`}
+            className="w-full h-full object-cover"
+            loading="lazy"
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SectionBody({ body }: { body: string }) {
+  return (
+    <div className="prose prose-neutral dark:prose-invert max-w-none">
+      <ReactMarkdown>{body}</ReactMarkdown>
+    </div>
+  );
+}
+
+// ── Layout-aware section renderer ─────────────────────────────────────────────
+
+function SectionContent({ section }: { section: ProjectSection }) {
+  const urls = section.imageUrls ?? [];
+  const hasPhotos = urls.length > 0;
+  const hasBody = !!section.body;
+  const layout = section.layout ?? 'text-above';
+
+  if (layout === 'photos-above') {
+    return (
+      <div className="space-y-6">
+        {hasPhotos && <SectionPhotoGrid urls={urls} title={section.title} />}
+        {hasBody && <SectionBody body={section.body} />}
+      </div>
+    );
+  }
+
+  if (layout === 'side-by-side') {
+    return (
+      <div className="flex flex-col md:flex-row gap-8">
+        {/* Text left */}
+        {hasBody && (
+          <div className="flex-1 min-w-0">
+            <SectionBody body={section.body} />
+          </div>
+        )}
+        {/* Photos right — stacks below on mobile */}
+        {hasPhotos && (
+          <div className="flex-1 min-w-0">
+            <SectionPhotoGrid urls={urls} title={section.title} />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Default: text-above (text first, then photos)
+  return (
+    <div className="space-y-6">
+      {hasBody && <SectionBody body={section.body} />}
+      {hasPhotos && <SectionPhotoGrid urls={urls} title={section.title} />}
+    </div>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ProjectDetail() {
   const [, params] = useRoute('/work/:slug');
@@ -23,6 +196,15 @@ export default function ProjectDetail() {
     queryFn: () => apiRequest<ProjectSection[]>('GET', `/api/projects/${slug}/sections`),
     enabled: !!slug && !!project,
   });
+
+  // Build carousel image list: uploaded hero images take priority; fall back to imageUrl
+  const heroImages: string[] = project
+    ? (project.imageUrls ?? []).length > 0
+      ? (project.imageUrls as string[])
+      : project.imageUrl
+      ? [project.imageUrl]
+      : []
+    : [];
 
   return (
     <Layout>
@@ -94,16 +276,8 @@ export default function ProjectDetail() {
               </div>
             )}
 
-            {/* Hero image */}
-            {project.imageUrl && (
-              <div className="w-full aspect-video rounded-[var(--radius)] overflow-hidden mb-10 border border-border">
-                <img
-                  src={project.imageUrl}
-                  alt={project.title}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            )}
+            {/* Hero carousel */}
+            <HeroCarousel images={heroImages} title={project.title} />
 
             {/* Short description */}
             <p className="text-lg text-muted-foreground leading-relaxed mb-10 border-l-2 border-primary pl-4">
@@ -134,41 +308,10 @@ export default function ProjectDetail() {
                       </span>
                       <div className="flex-1 h-px bg-border" />
                     </div>
-                    <h2 className="font-syne font-bold text-2xl text-foreground mb-6">{section.title}</h2>
-
-                    {/* Photos */}
-                    {(section.imageUrls ?? []).length > 0 && (
-                      <div className={`grid gap-4 mb-8 ${
-                        section.imageUrls!.length === 1
-                          ? 'grid-cols-1'
-                          : section.imageUrls!.length === 2
-                          ? 'grid-cols-2'
-                          : 'grid-cols-2 lg:grid-cols-3'
-                      }`}>
-                        {section.imageUrls!.map((url, j) => (
-                          <div
-                            key={j}
-                            className={`rounded-[var(--radius)] overflow-hidden border border-border ${
-                              section.imageUrls!.length === 1 ? 'aspect-video' : 'aspect-[4/3]'
-                            }`}
-                          >
-                            <img
-                              src={url}
-                              alt={`${section.title} — photo ${j + 1}`}
-                              className="w-full h-full object-cover"
-                              loading="lazy"
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Body */}
-                    {section.body && (
-                      <div className="prose prose-neutral dark:prose-invert max-w-none">
-                        <ReactMarkdown>{section.body}</ReactMarkdown>
-                      </div>
-                    )}
+                    <h2 className="font-syne font-bold text-2xl text-foreground mb-6">
+                      {section.title}
+                    </h2>
+                    <SectionContent section={section} />
                   </motion.section>
                 ))}
               </div>
