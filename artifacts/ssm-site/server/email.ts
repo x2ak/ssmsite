@@ -53,6 +53,37 @@ export async function sendEnquiryNotification(inquiry: Inquiry): Promise<void> {
   });
 }
 
+export async function sendEnquiryReply(inquiry: Inquiry, body: string): Promise<void> {
+  const resend = getResend();
+  await resend.emails.send({
+    from: FROM_ADDRESS,
+    to: inquiry.email,
+    replyTo: ADMIN_EMAIL,
+    subject: `Re: Your enquiry with Secure Solutions Midlands`,
+    html: `
+      <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;color:#0f0f0f;">
+        <div style="background:#0a0a0a;padding:2rem;border-radius:8px 8px 0 0;">
+          <p style="color:#00c8d7;font-family:monospace;font-size:0.875rem;margin:0 0 0.5rem;">SECURE SOLUTIONS MIDLANDS</p>
+          <h1 style="color:#fff;margin:0;font-size:1.5rem;">Re: Your enquiry</h1>
+        </div>
+        <div style="background:#fff;padding:2rem;border-radius:0 0 8px 8px;border:1px solid #e5e5e5;">
+          <p>Hi ${inquiry.firstName},</p>
+          <div style="margin:1.5rem 0;white-space:pre-wrap;">${body.replace(/\n/g, '<br>')}</div>
+          <hr style="border:none;border-top:1px solid #e5e5e5;margin:1.5rem 0;">
+          <p style="margin:0;color:#555;font-size:0.9rem;">
+            <strong>Zakria</strong><br>
+            Secure Solutions Midlands<br>
+            <a href="mailto:contact@ssmltd.co.uk" style="color:#00c8d7;">contact@ssmltd.co.uk</a>
+          </p>
+        </div>
+        <p style="text-align:center;font-size:0.75rem;color:#999;margin-top:1rem;">
+          © ${new Date().getFullYear()} Secure Solutions Midlands Ltd
+        </p>
+      </div>
+    `,
+  });
+}
+
 export async function sendEnquiryConfirmation(inquiry: Inquiry): Promise<void> {
   const resend = getResend();
   await resend.emails.send({

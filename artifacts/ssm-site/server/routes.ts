@@ -2,10 +2,11 @@ import type { Express } from 'express';
 import multer from 'multer';
 import { requireAdmin } from './auth';
 import { handleChat } from './chat';
-import { sendEnquiryNotification, sendEnquiryConfirmation } from './email';
+import { sendEnquiryNotification, sendEnquiryConfirmation, sendEnquiryReply } from './email';
 import {
   createInquiry,
   getAllInquiries,
+  getInquiryById,
   updateInquiryStatus,
   deleteInquiry,
   getAllProjects,
@@ -156,6 +157,28 @@ export function registerRoutes(app: Express) {
     } catch (err) {
       console.error('Error deleting inquiry:', err);
       res.status(500).json({ error: 'Failed to delete enquiry' });
+    }
+  });
+
+  app.post('/api/admin/inquiries/:id/reply', requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      const { body } = req.body as { body: string };
+      if (!body?.trim()) {
+        res.status(400).json({ error: 'Reply body is required' });
+        return;
+      }
+      const inquiry = await getInquiryById(id);
+      if (!inquiry) {
+        res.status(404).json({ error: 'Enquiry not found' });
+        return;
+      }
+      await sendEnquiryReply(inquiry, body.trim());
+      await updateInquiryStatus(id, 'replied');
+      res.json({ success: true });
+    } catch (err) {
+      console.error('Error sending reply:', err);
+      res.status(500).json({ error: 'Failed to send reply' });
     }
   });
 

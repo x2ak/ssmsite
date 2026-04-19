@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import {
   LogOut, Plus, Trash2, Edit2, Eye, EyeOff,
   ChevronDown, ChevronUp, CheckCircle, Copy, Link2, BookOpen, Briefcase,
-  Upload, ImageIcon,
+  Upload, ImageIcon, Reply, Send,
 } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -103,6 +103,33 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
 function EnquiriesTab() {
   const qc = useQueryClient();
   const [expanded, setExpanded] = useState<number | null>(null);
+  const [replyOpenFor, setReplyOpenFor] = useState<number | null>(null);
+  const [replyText, setReplyText] = useState('');
+  const [replyError, setReplyError] = useState<string | null>(null);
+  const [replySentIds, setReplySentIds] = useState<number[]>([]);
+
+  function toggleExpand(id: number) {
+    if (expanded === id) {
+      setExpanded(null);
+      setReplyOpenFor(null);
+      setReplyText('');
+      setReplyError(null);
+    } else {
+      setExpanded(id);
+    }
+  }
+
+  function openReply(id: number) {
+    setReplyOpenFor(id);
+    setReplyText('');
+    setReplyError(null);
+  }
+
+  function closeReply() {
+    setReplyOpenFor(null);
+    setReplyText('');
+    setReplyError(null);
+  }
 
   const { data: inquiries = [], isLoading } = useQuery<Inquiry[]>({
     queryKey: ['admin', 'inquiries'],
@@ -120,6 +147,20 @@ function EnquiriesTab() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'inquiries'] });
       setExpanded(null);
+      setReplyOpenFor(null);
+    },
+  });
+
+  const replyMutation = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: string }) =>
+      apiRequest('POST', `/api/admin/inquiries/${id}/reply`, { body }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'inquiries'] });
+      setReplySentIds(prev => [...prev, vars.id]);
+      closeReply();
+    },
+    onError: () => {
+      setReplyError('Failed to send — check your email config and try again.');
     },
   });
 
@@ -151,7 +192,7 @@ function EnquiriesTab() {
         <div key={inq.id} className="border border-border rounded-[var(--radius)] bg-card overflow-hidden">
           <button
             className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/50 transition-colors"
-            onClick={() => setExpanded(expanded === inq.id ? null : inq.id)}
+            onClick={() => toggleExpand(inq.id)}
           >
             <div className="flex items-center gap-4 min-w-0">
               <Badge variant={statusColour(inq.status)}>{inq.status}</Badge>
@@ -215,7 +256,64 @@ function EnquiriesTab() {
                 </div>
               )}
 
-              <div className="flex items-center justify-between gap-2 flex-wrap">
+              {/* Reply sent confirmation */}
+              {replySentIds.includes(inq.id) && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-[var(--radius)] bg-emerald-50 border border-emerald-200 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-400 text-xs">
+                  <CheckCircle size={12} />
+                  Reply sent to {inq.email}
+                </div>
+              )}
+
+              {/* Reply composer */}
+              {replyOpenFor === inq.id ? (
+                <div className="space-y-2 border border-border rounded-[var(--radius)] p-3 bg-muted/30">
+                  <p className="text-xs font-medium text-foreground">
+                    Reply to {inq.firstName} ({inq.email})
+                  </p>
+                  <textarea
+                    className="w-full text-sm rounded-[var(--radius)] border border-border bg-background text-foreground px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                    rows={6}
+                    placeholder="Write your reply…"
+                    value={replyText}
+                    onChange={e => setReplyText(e.target.value)}
+                    autoFocus
+                  />
+                  {replyError && (
+                    <p className="text-xs text-destructive">{replyError}</p>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      disabled={!replyText.trim() || replyMutation.isPending}
+                      onClick={() => replyMutation.mutate({ id: inq.id, body: replyText })}
+                    >
+                      <Send size={13} />
+                      {replyMutation.isPending ? 'Sending…' : 'Send reply'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={closeReply}
+                      disabled={replyMutation.isPending}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <button
+                    onClick={() => openReply(inq.id)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-[var(--radius)] border border-primary/40 text-primary hover:bg-primary/10 transition-colors cursor-pointer font-medium"
+                  >
+                    <Reply size={12} />
+                    Reply by email
+                  </button>
+                </div>
+              )}
+
+              {/* Status + delete row */}
+              <div className="flex items-center justify-between gap-2 flex-wrap pt-1 border-t border-border">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs text-muted-foreground">Mark as:</span>
                   {['new', 'read', 'replied'].map(s => (
