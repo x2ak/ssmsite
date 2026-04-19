@@ -115,6 +115,14 @@ function EnquiriesTab() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'inquiries'] }),
   });
 
+  const deleteInquiryMutation = useMutation({
+    mutationFn: (id: number) => apiRequest('DELETE', `/api/admin/inquiries/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'inquiries'] });
+      setExpanded(null);
+    },
+  });
+
   const statusColour = (status: string) => {
     if (status === 'new') return 'default';
     if (status === 'read') return 'muted';
@@ -207,23 +215,37 @@ function EnquiriesTab() {
                 </div>
               )}
 
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-muted-foreground">Mark as:</span>
-                {['new', 'read', 'replied'].map(s => (
-                  <button
-                    key={s}
-                    onClick={() => updateStatus.mutate({ id: inq.id, status: s })}
-                    disabled={inq.status === s}
-                    className={cn(
-                      'px-3 py-1 text-xs rounded-[var(--radius)] border transition-colors cursor-pointer',
-                      inq.status === s
-                        ? 'border-primary bg-primary/10 text-primary'
-                        : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
-                    )}
-                  >
-                    {s}
-                  </button>
-                ))}
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-muted-foreground">Mark as:</span>
+                  {['new', 'read', 'replied'].map(s => (
+                    <button
+                      key={s}
+                      onClick={() => updateStatus.mutate({ id: inq.id, status: s })}
+                      disabled={inq.status === s}
+                      className={cn(
+                        'px-3 py-1 text-xs rounded-[var(--radius)] border transition-colors cursor-pointer',
+                        inq.status === s
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
+                      )}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => {
+                    if (window.confirm('Delete this enquiry? This cannot be undone.')) {
+                      deleteInquiryMutation.mutate(inq.id);
+                    }
+                  }}
+                  disabled={deleteInquiryMutation.isPending}
+                  className="flex items-center gap-1.5 px-3 py-1 text-xs rounded-[var(--radius)] border border-destructive/40 text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                >
+                  <Trash2 size={11} />
+                  Delete
+                </button>
               </div>
             </div>
           )}

@@ -9,7 +9,7 @@ const anthropic = new Anthropic({
 });
 
 function buildSystemPrompt(projectList: string, knowledgeBaseText: string): string {
-  return `You are Zak's AI sales assistant on the SSM-LTD website. Your one job is to turn website visitors into booked calls with Zakria — "The Real Zak" — the founder of Secure Solutions Midlands.
+  return `You are Zak's AI sales assistant on the SSM-LTD website. Your one job is to turn website visitors into booked calls with Zak — the founder of Secure Solutions Midlands.
 
 You are NOT a generic chatbot. You are sharp, witty, and genuinely helpful. Think of yourself as a world-class sales consultant who happens to be British and has a dry sense of humour. You close deals — but you do it by actually understanding what people need, not by being pushy.
 
@@ -61,7 +61,7 @@ STEP 3 — HANDLE OBJECTIONS
 Budget? "It depends on the scope — that's literally what the call with Zak is for." Too busy? "Zak keeps the first call to 20 minutes. No decks, no fluff." Already have someone? "What's stopping you from being happy with what you've got?"
 
 STEP 4 — PITCH THE CALL
-Make it clear: the goal here is to get them a call with The Real Zak. He is a human being who actually does the work. Not an outsourced team. Not an AI. A person.
+Make it clear: the goal here is to get them a call with Zak. He is a human being who actually does the work. Not an outsourced team. Not an AI. A person.
 
 Use lines like:
 - "This is exactly the kind of brief Zak likes. Want me to get your details across to him?"
@@ -91,7 +91,7 @@ LEAD CAPTURE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 When a visitor is clearly interested, collect: first name, last name, email — and also ask if they'd like to leave a phone number so Zak can call them directly instead of emailing.
 
-If they say no to the phone number, say something like "No worries at all — email it is." then move on immediately. Do not ask again.
+If they say no to the phone number, say something like "No worries — email it is." then move on immediately. Do not ask again.
 
 Once you have name and email (phone is optional), output this exact JSON block on its own line:
 
@@ -99,8 +99,10 @@ Once you have name and email (phone is optional), output this exact JSON block o
 
 If no phone was given, use an empty string for phone: "phone": "".
 
-After capturing the lead, always say something like:
-"Perfect — I'll make sure The Real Zak gets this. He'll be in touch within 24 hours. You're in good hands."
+After capturing the lead, say something like:
+"Perfect — I'll make sure Zak gets this. He'll be in touch within 24 hours."
+
+IMPORTANT: Once the lead JSON has been output and you've confirmed, the lead is captured. Do NOT output another lead JSON block in subsequent messages — even if the user continues chatting. The enquiry has been logged. Just continue the conversation naturally.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 IMPORTANT RULES
@@ -134,7 +136,10 @@ function extractLeadData(text: string): { lead: Record<string, string> | null; c
 }
 
 export async function handleChat(req: Request, res: Response): Promise<void> {
-  const { messages } = req.body as { messages: ChatMessage[] };
+  const { messages, leadAlreadyCaptured } = req.body as {
+    messages: ChatMessage[];
+    leadAlreadyCaptured?: boolean;
+  };
 
   if (!messages || !Array.isArray(messages)) {
     res.status(400).json({ error: 'messages array is required' });
@@ -149,6 +154,10 @@ export async function handleChat(req: Request, res: Response): Promise<void> {
   res.flushHeaders();
 
   let fullText = '';
+  // Tracks text already sent to the client so we can avoid re-sending it
+  let clientText = '';
+  let inLeadBlock = false;
+  let leadHandled = false;
 
   try {
     // Fetch portfolio and active knowledge base entries for system prompt injection
@@ -186,35 +195,61 @@ export async function handleChat(req: Request, res: Response): Promise<void> {
         const token = chunk.delta.text;
         fullText += token;
 
-        // Check if we are accumulating a lead JSON block — don't stream it
-        const hasOpenLead = fullText.includes('{"__lead__"');
-        const hasClosedLead = hasOpenLead && fullText.includes('}');
+        // Detect when the model starts emitting a lead JSON block
+        if (!inLeadBlock && fullText.includes('{"__lead__"')) {
+          inLeadBlock = true;
 
-        if (!hasOpenLead) {
-          res.write(`data: ${JSON.stringify({ token })}\n\n`);
-        } else if (hasClosedLead) {
-          const { lead, clean } = extractLeadData(fullText);
+          // Stream any text that appeared BEFORE the lead JSON block
+          const leadStart = fullText.indexOf('{"__lead__"');
+          const preLeadText = fullText.slice(clientText.length, leadStart);
+          if (preLeadText) {
+            res.write(`data: ${JSON.stringify({ token: preLeadText })}\n\n`);
+            clientText += preLeadText;
+          }
+        }
 
-          if (lead) {
-            try {
-              const inquiry = await createInquiry({
-                firstName: lead.firstName || 'Unknown',
-                lastName: lead.lastName || '',
-                email: lead.email || '',
-                message: lead.summary || 'Lead captured via AI chat',
-                source: 'chat',
-                chatTranscript: JSON.stringify(messages),
-              });
-              await sendEnquiryNotification(inquiry);
-            } catch (err) {
-              console.error('Failed to save chat lead:', err);
+        if (inLeadBlock && !leadHandled) {
+          // Check if the JSON block has closed
+          const afterOpen = fullText.slice(fullText.indexOf('{"__lead__"'));
+          if (afterOpen.includes('}')) {
+            leadHandled = true;
+
+            const { lead, clean } = extractLeadData(fullText);
+
+            // Only save if the client hasn't already told us the lead was captured
+            if (lead && !leadAlreadyCaptured) {
+              try {
+                const inquiry = await createInquiry({
+                  firstName: lead.firstName || 'Unknown',
+                  lastName: lead.lastName || '',
+                  email: lead.email || '',
+                  message: lead.summary || 'Lead captured via AI chat',
+                  source: 'chat',
+                  chatTranscript: JSON.stringify(messages),
+                });
+                await sendEnquiryNotification(inquiry);
+              } catch (err) {
+                console.error('Failed to save chat lead:', err);
+              }
+
+              res.write(`data: ${JSON.stringify({ lead: true })}\n\n`);
             }
 
-            res.write(`data: ${JSON.stringify({ lead: true })}\n\n`);
+            // Replace the client's current text with the clean version
+            // (removes the JSON block and deduplicates any pre-lead text)
+            res.write(`data: ${JSON.stringify({ replace: clean })}\n\n`);
+            clientText = clean;
+            fullText = clean;
           }
-
-          res.write(`data: ${JSON.stringify({ token: clean })}\n\n`);
-          fullText = clean;
+          // Otherwise still accumulating the JSON block — don't stream yet
+        } else if (!inLeadBlock) {
+          // Normal streaming — no lead JSON detected
+          res.write(`data: ${JSON.stringify({ token })}\n\n`);
+          clientText += token;
+        }
+        // If inLeadBlock && leadHandled: any remaining tokens after the JSON block are streamed normally
+        else if (inLeadBlock && leadHandled) {
+          res.write(`data: ${JSON.stringify({ token })}\n\n`);
         }
       }
     }

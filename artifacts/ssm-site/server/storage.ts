@@ -28,6 +28,10 @@ export async function updateInquiryStatus(id: number, status: string): Promise<I
   return inquiry;
 }
 
+export async function deleteInquiry(id: number): Promise<void> {
+  await db.delete(inquiries).where(eq(inquiries.id, id));
+}
+
 // ── Projects ──────────────────────────────────────────────────────────────────
 
 export async function getAllProjects(): Promise<Project[]> {

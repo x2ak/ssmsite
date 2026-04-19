@@ -81,6 +81,7 @@ export function ChatInterface() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: updatedMessages.map(m => ({ role: m.role, content: m.content })),
+          leadAlreadyCaptured: leadCaptured,
         }),
         signal: abortRef.current.signal,
       });
@@ -109,6 +110,7 @@ export function ChatInterface() {
           try {
             const parsed = JSON.parse(data) as {
               token?: string;
+              replace?: string;
               lead?: boolean;
               error?: string;
             };
@@ -123,7 +125,17 @@ export function ChatInterface() {
               setLeadCaptured(true);
             }
 
-            if (parsed.token !== undefined) {
+            if (parsed.replace !== undefined) {
+              // Server sent a corrected full text — replace the last assistant message
+              setMessages(prev => {
+                const updated = [...prev];
+                const last = updated[updated.length - 1];
+                if (last?.role === 'assistant') {
+                  updated[updated.length - 1] = { ...last, content: parsed.replace! };
+                }
+                return updated;
+              });
+            } else if (parsed.token !== undefined) {
               setMessages(prev => {
                 const updated = [...prev];
                 const last = updated[updated.length - 1];

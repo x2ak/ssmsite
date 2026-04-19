@@ -7,6 +7,7 @@ import {
   createInquiry,
   getAllInquiries,
   updateInquiryStatus,
+  deleteInquiry,
   getAllProjects,
   getProjectBySlug,
   createProject,
@@ -144,6 +145,17 @@ export function registerRoutes(app: Express) {
     } catch (err) {
       console.error('Error updating inquiry:', err);
       res.status(500).json({ error: 'Failed to update enquiry' });
+    }
+  });
+
+  app.delete('/api/admin/inquiries/:id', requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      await deleteInquiry(id);
+      res.json({ success: true });
+    } catch (err) {
+      console.error('Error deleting inquiry:', err);
+      res.status(500).json({ error: 'Failed to delete enquiry' });
     }
   });
 
