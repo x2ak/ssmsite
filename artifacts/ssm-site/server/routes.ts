@@ -211,6 +211,43 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // Upload a preview video for a project thumbnail (100 MB limit)
+  // Registered BEFORE /:id routes to avoid Express matching "upload-preview-video" as an id param.
+  app.post('/api/admin/projects/upload-preview-video', requireAdmin, async (req, res) => {
+    // Wrap multer in a promise so MulterError is caught by our try/catch and returned as JSON
+    try {
+      await new Promise<void>((resolve, reject) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        videoUpload.single('video')(req as any, res as any, (err: unknown) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+      const file = req.file;
+      if (!file) { res.status(400).json({ error: 'No file provided' }); return; }
+      const allowed = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/x-msvideo'];
+      if (!allowed.includes(file.mimetype)) {
+        res.status(400).json({ error: `File type "${file.mimetype}" is not allowed — use mp4, webm, mov, ogg, or avi` }); return;
+      }
+      const objectName = await uploadToGCS(file.buffer, file.originalname, file.mimetype);
+      const record = await createGalleryImage({
+        filename: file.originalname,
+        objectName,
+        contentType: file.mimetype,
+        label: 'preview-video',
+      });
+      res.status(201).json({ id: record.id, url: `/api/gallery/images/${record.id}` });
+    } catch (err: unknown) {
+      const multerErr = err as { code?: string; message?: string };
+      if (multerErr?.code === 'LIMIT_FILE_SIZE') {
+        res.status(413).json({ error: 'Video is too large — maximum is 100 MB' });
+      } else {
+        console.error('Error uploading preview video:', err);
+        res.status(500).json({ error: multerErr?.message || 'Video upload failed' });
+      }
+    }
+  });
+
   app.post('/api/admin/projects', requireAdmin, async (req, res) => {
     try {
       const project = await createProject(req.body);
@@ -473,30 +510,6 @@ export function registerRoutes(app: Express) {
     } catch (err) {
       console.error('Error uploading image:', err);
       res.status(500).json({ error: 'Upload failed' });
-    }
-  });
-
-  // Upload a preview video for a project thumbnail (100 MB limit)
-  app.post('/api/admin/projects/upload-preview-video', requireAdmin, videoUpload.single('video'), async (req, res) => {
-    try {
-      const file = req.file;
-      if (!file) { res.status(400).json({ error: 'No file provided' }); return; }
-      const allowed = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/x-msvideo'];
-      if (!allowed.includes(file.mimetype)) {
-        res.status(400).json({ error: 'Only video files are allowed (mp4, webm, ogg, mov, avi)' }); return;
-      }
-      const objectName = await uploadToGCS(file.buffer, file.originalname, file.mimetype);
-      // Reuse gallery_images table to store and serve the video via the existing stream endpoint
-      const record = await createGalleryImage({
-        filename: file.originalname,
-        objectName,
-        contentType: file.mimetype,
-        label: 'preview-video',
-      });
-      res.status(201).json({ id: record.id, url: `/api/gallery/images/${record.id}` });
-    } catch (err) {
-      console.error('Error uploading preview video:', err);
-      res.status(500).json({ error: 'Video upload failed' });
     }
   });
 
