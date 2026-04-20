@@ -69,6 +69,8 @@ export default defineConfig({
       "/api": {
         target: `http://localhost:${backendPort}`,
         changeOrigin: true,
+        timeout: 0,        // no socket timeout — needed for large file uploads
+        proxyTimeout: 0,   // no upstream timeout
       },
     },
     fs: {

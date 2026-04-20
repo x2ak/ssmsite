@@ -214,7 +214,24 @@ export function registerRoutes(app: Express) {
   // Upload a preview video for a project thumbnail (100 MB limit)
   // Registered BEFORE /:id routes to avoid Express matching "upload-preview-video" as an id param.
   app.post('/api/admin/projects/upload-preview-video', requireAdmin, async (req, res) => {
-    // Wrap multer in a promise so MulterError is caught by our try/catch and returned as JSON
+    // Track whether we've already sent a response (abort can fire after success)
+    let responded = false;
+    const reply = (status: number, body: object) => {
+      if (responded) return;
+      responded = true;
+      res.status(status).json(body);
+    };
+
+    // If the client disconnects mid-upload, send a clean error
+    req.on('aborted', () => {
+      reply(499, { error: 'Upload cancelled — the connection was closed before the file arrived. Try a smaller file or a faster connection.' });
+    });
+    req.on('close', () => {
+      if (!res.writableEnded) {
+        reply(499, { error: 'Upload cancelled — connection closed mid-transfer.' });
+      }
+    });
+
     try {
       await new Promise<void>((resolve, reject) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -224,10 +241,10 @@ export function registerRoutes(app: Express) {
         });
       });
       const file = req.file;
-      if (!file) { res.status(400).json({ error: 'No file provided' }); return; }
+      if (!file) { reply(400, { error: 'No file received — make sure the field name is "video".' }); return; }
       const allowed = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/x-msvideo'];
       if (!allowed.includes(file.mimetype)) {
-        res.status(400).json({ error: `File type "${file.mimetype}" is not allowed — use mp4, webm, mov, ogg, or avi` }); return;
+        reply(400, { error: `File type "${file.mimetype}" is not allowed — use mp4, webm, mov, ogg, or avi` }); return;
       }
       const objectName = await uploadToGCS(file.buffer, file.originalname, file.mimetype);
       const record = await createGalleryImage({
@@ -236,14 +253,16 @@ export function registerRoutes(app: Express) {
         contentType: file.mimetype,
         label: 'preview-video',
       });
-      res.status(201).json({ id: record.id, url: `/api/gallery/images/${record.id}` });
+      reply(201, { id: record.id, url: `/api/gallery/images/${record.id}` });
     } catch (err: unknown) {
       const multerErr = err as { code?: string; message?: string };
       if (multerErr?.code === 'LIMIT_FILE_SIZE') {
-        res.status(413).json({ error: 'Video is too large — maximum is 100 MB' });
+        reply(413, { error: 'Video is too large — maximum is 100 MB' });
+      } else if ((multerErr?.message || '').includes('aborted') || (multerErr?.message || '').includes('ECONNRESET')) {
+        reply(499, { error: 'Upload cancelled — the connection dropped mid-transfer. Try a shorter clip.' });
       } else {
         console.error('Error uploading preview video:', err);
-        res.status(500).json({ error: multerErr?.message || 'Video upload failed' });
+        reply(500, { error: multerErr?.message || 'Video upload failed — please try again' });
       }
     }
   });
