@@ -427,9 +427,17 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  function coercePostDates(data: Record<string, unknown>): Record<string, unknown> {
+    const result = { ...data };
+    if (typeof result.publishedAt === 'string') {
+      result.publishedAt = result.publishedAt ? new Date(result.publishedAt) : null;
+    }
+    return result;
+  }
+
   app.post('/api/admin/posts', requireAdmin, async (req, res) => {
     try {
-      const post = await createPost(req.body);
+      const post = await createPost(coercePostDates(req.body) as Parameters<typeof createPost>[0]);
       res.status(201).json(post);
     } catch (err) {
       console.error('Error creating post:', err);
@@ -440,7 +448,8 @@ export function registerRoutes(app: Express) {
   app.patch('/api/admin/posts/:id', requireAdmin, async (req, res) => {
     try {
       const id = parseInt(req.params.id, 10);
-      const { id: _id, createdAt: _ca, ...data } = req.body as Record<string, unknown>;
+      const { id: _id, createdAt: _ca, ...raw } = req.body as Record<string, unknown>;
+      const data = coercePostDates(raw);
       const updated = await updatePost(id, data);
       res.json(updated);
     } catch (err) {
