@@ -81,7 +81,7 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-background relative overflow-hidden">
+    <div className="h-[100dvh] flex flex-col bg-background relative overflow-hidden">
       <NetworkBackground />
 
       {/* Header */}
@@ -162,37 +162,39 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      {/* Main content — vertically centred */}
-      <main className="flex-1 flex flex-col items-center justify-center px-6 py-24 relative z-10">
-        <div className="w-full max-w-[680px]">
-          {/* Brand label */}
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
-            className="flex items-center gap-2 mb-8"
-          >
-            <span className="pulse-dot" aria-hidden="true" />
-            <span className="font-mono text-xs font-medium tracking-widest uppercase text-muted-foreground">
-              Secure Solutions Midlands
-            </span>
-          </motion.div>
+      {/* Main content — fills remaining viewport, compresses when keyboard opens */}
+      <main className="flex-1 flex flex-col items-center overflow-hidden px-6 pt-[64px] pb-4 relative z-10">
+        <div className="w-full max-w-[680px] flex flex-col flex-1 min-h-0">
 
-          {/* Hero heading — types in character by character */}
-          <motion.h1
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.2 }}
-            className="font-syne font-bold text-foreground leading-[1.05] mb-10 text-balance"
-            style={{ fontSize: 'clamp(2.5rem, 7vw, 5rem)' }}
-          >
-            {HEADING.slice(0, typedChars)}
-            {!headingDone && (
-              <span className="cursor-blink" aria-hidden="true" />
-            )}
-          </motion.h1>
+          {/* Brand label + hero heading — shrink-0 so they don't squash */}
+          <div className="flex-shrink-0 pt-6 sm:pt-10">
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+              className="flex items-center gap-2 mb-6"
+            >
+              <span className="pulse-dot" aria-hidden="true" />
+              <span className="font-mono text-xs font-medium tracking-widest uppercase text-muted-foreground">
+                Secure Solutions Midlands
+              </span>
+            </motion.div>
 
-          {/* Chat interface — appears once heading finishes typing */}
+            <motion.h1
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.2 }}
+              className="font-syne font-bold text-foreground leading-[1.05] mb-6 sm:mb-10 text-balance"
+              style={{ fontSize: 'clamp(1.75rem, 7vw, 5rem)' }}
+            >
+              {HEADING.slice(0, typedChars)}
+              {!headingDone && (
+                <span className="cursor-blink" aria-hidden="true" />
+              )}
+            </motion.h1>
+          </div>
+
+          {/* Chat — grows to fill all remaining space so input sits at bottom */}
           <AnimatePresence>
             {headingDone && (
               <motion.div
@@ -200,18 +202,19 @@ export default function Home() {
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4 }}
+                className="flex-1 min-h-0 flex flex-col"
               >
                 <ChatInterface />
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* Footer hint */}
+          {/* Footer hint — desktop only, hidden on mobile to save space */}
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: headingDone ? 1 : 0 }}
             transition={{ duration: 0.5, delay: 0.5 }}
-            className="mt-8 text-xs text-muted-foreground text-center"
+            className="hidden sm:block flex-shrink-0 mt-4 text-xs text-muted-foreground text-center"
           >
             Or{' '}
             <Link href="/contact">

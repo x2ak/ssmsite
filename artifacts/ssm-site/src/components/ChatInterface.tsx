@@ -206,9 +206,9 @@ export function ChatInterface() {
   }
 
   return (
-    <div className="w-full max-w-[680px] mx-auto flex flex-col">
-      {/* Message list */}
-      <div className="flex flex-col gap-4 min-h-[200px] max-h-[420px] overflow-y-auto px-1 py-2 mb-4">
+    <div className="w-full flex flex-col h-full">
+      {/* Message list — grows to fill available space, scrollable */}
+      <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto px-1 py-2 mb-3">
         {messages.map((msg, i) => (
           <div
             key={i}
@@ -310,8 +310,14 @@ export function ChatInterface() {
         </button>
       </form>
 
-      <p className="mt-2 text-center text-xs text-muted-foreground">
+      {/* Desktop: keyboard shortcut hint. Mobile: "send directly" fallback link */}
+      <p className="mt-2 text-center text-xs text-muted-foreground hidden sm:block">
         Press <kbd className="font-mono">Enter</kbd> to send · <kbd className="font-mono">Shift+Enter</kbd> for new line
+      </p>
+      <p className="mt-2 text-center text-xs text-muted-foreground sm:hidden">
+        Or{' '}
+        <a href="/contact" className="text-primary hover:underline">send us a message directly</a>
+        {' '}— we respond within 24 hours.
       </p>
     </div>
   );
