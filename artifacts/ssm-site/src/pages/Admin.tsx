@@ -1195,9 +1195,20 @@ function ProjectForm({
           onClick={handleSave}
           size="sm"
           disabled={saving || saved}
-          className={cn(saved && 'bg-green-600 hover:bg-green-600 text-white border-green-600')}
+          className={cn('transition-colors duration-300', saved && 'bg-green-600 hover:bg-green-600 text-white border-green-600')}
         >
-          {saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save project'}
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.span
+              key={saved ? 'saved' : saving ? 'saving' : 'idle'}
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              transition={{ duration: 0.15 }}
+              style={{ display: 'inline-flex', alignItems: 'center' }}
+            >
+              {saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save project'}
+            </motion.span>
+          </AnimatePresence>
         </Button>
         <Button type="button" variant="outline" onClick={onCancel} size="sm" disabled={saving || saved}>
           Cancel
@@ -2132,9 +2143,20 @@ function PostEditor({
           onClick={() => onSave(form)}
           size="sm"
           disabled={saving || saved}
-          className={cn(saved && 'bg-green-600 hover:bg-green-600 text-white border-green-600')}
+          className={cn('transition-colors duration-300', saved && 'bg-green-600 hover:bg-green-600 text-white border-green-600')}
         >
-          {saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save post'}
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.span
+              key={saved ? 'saved' : saving ? 'saving' : 'idle'}
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              transition={{ duration: 0.15 }}
+              style={{ display: 'inline-flex', alignItems: 'center' }}
+            >
+              {saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save post'}
+            </motion.span>
+          </AnimatePresence>
         </Button>
         <Button variant="outline" onClick={onCancel} size="sm" disabled={saving || saved}>Cancel</Button>
       </div>
@@ -2489,9 +2511,20 @@ function KBForm({
         <Button
           onClick={() => onSave(form)}
           disabled={saving || saved || !form.title?.trim() || !form.content?.trim()}
-          className={cn(saved && 'bg-green-600 hover:bg-green-600 text-white border-green-600')}
+          className={cn('transition-colors duration-300', saved && 'bg-green-600 hover:bg-green-600 text-white border-green-600')}
         >
-          {saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save entry'}
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.span
+              key={saved ? 'saved' : saving ? 'saving' : 'idle'}
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              transition={{ duration: 0.15 }}
+              style={{ display: 'inline-flex', alignItems: 'center' }}
+            >
+              {saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save entry'}
+            </motion.span>
+          </AnimatePresence>
         </Button>
         <Button variant="ghost" onClick={onCancel} disabled={saving || saved}>Cancel</Button>
       </div>
