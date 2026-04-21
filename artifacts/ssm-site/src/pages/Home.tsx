@@ -40,41 +40,6 @@ export default function Home() {
     };
   }, []);
 
-  // Redirect to work page when user scrolls/swipes down from the chat section
-  useEffect(() => {
-    const WORK_URL = 'https://ssmltd.co.uk/work';
-
-    function atPageBottom() {
-      return window.scrollY + window.innerHeight >= document.body.scrollHeight - 8;
-    }
-
-    function handleWheel(e: WheelEvent) {
-      if (e.deltaY > 0 && atPageBottom()) {
-        window.location.href = WORK_URL;
-      }
-    }
-
-    let touchStartY = 0;
-    function handleTouchStart(e: TouchEvent) {
-      touchStartY = e.touches[0].clientY;
-    }
-    function handleTouchEnd(e: TouchEvent) {
-      const swipedUp = touchStartY - e.changedTouches[0].clientY > 40;
-      if (swipedUp && atPageBottom()) {
-        window.location.href = WORK_URL;
-      }
-    }
-
-    window.addEventListener('wheel', handleWheel, { passive: true });
-    window.addEventListener('touchstart', handleTouchStart, { passive: true });
-    window.addEventListener('touchend', handleTouchEnd, { passive: true });
-    return () => {
-      window.removeEventListener('wheel', handleWheel);
-      window.removeEventListener('touchstart', handleTouchStart);
-      window.removeEventListener('touchend', handleTouchEnd);
-    };
-  }, []);
-
   function handleMobileNav(href: string) {
     setMenuOpen(false);
     navigate(href);
