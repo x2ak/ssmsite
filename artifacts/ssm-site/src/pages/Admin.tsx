@@ -514,11 +514,13 @@ function SectionEditor({
   onSave,
   onCancel,
   saving,
+  saved,
 }: {
   initial?: Partial<ProjectSection>;
   onSave: (data: { title: string; body: string; imageUrls: string[]; displayOrder: number; layout: string }) => void;
   onCancel: () => void;
   saving?: boolean;
+  saved?: boolean;
 }) {
   const [title, setTitle] = useState(initial?.title ?? '');
   const [body, setBody] = useState(initial?.body ?? '');
@@ -635,11 +637,23 @@ function SectionEditor({
         <Button
           size="sm"
           onClick={() => onSave({ title, body, imageUrls, displayOrder, layout })}
-          disabled={!title.trim() || saving}
+          disabled={!title.trim() || saving || saved}
+          className={cn('transition-colors duration-300', saved && 'bg-green-600 hover:bg-green-600 text-white border-green-600')}
         >
-          {saving ? 'Saving…' : 'Save section'}
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.span
+              key={saved ? 'saved' : saving ? 'saving' : 'idle'}
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              transition={{ duration: 0.15 }}
+              style={{ display: 'inline-flex', alignItems: 'center' }}
+            >
+              {saved ? 'Saved ✓' : saving ? <><Loader2 aria-hidden="true" className="animate-spin mr-1.5 h-3.5 w-3.5" />Saving…</> : 'Save section'}
+            </motion.span>
+          </AnimatePresence>
         </Button>
-        <Button size="sm" variant="outline" onClick={onCancel} disabled={saving}>
+        <Button size="sm" variant="outline" onClick={onCancel} disabled={saving || saved}>
           Cancel
         </Button>
       </div>
@@ -652,6 +666,8 @@ function SectionsPanel({ projectId }: { projectId: number }) {
   const toast = useToast();
   const [addingNew, setAddingNew] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [savedSectionId, setSavedSectionId] = useState<number | null>(null);
+  const [createSaved, setCreateSaved] = useState(false);
 
   const { data: sections = [], isLoading } = useQuery<ProjectSection[]>({
     queryKey: ['admin', 'sections', projectId],
@@ -663,8 +679,12 @@ function SectionsPanel({ projectId }: { projectId: number }) {
       apiRequest('POST', `/api/admin/projects/${projectId}/sections`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'sections', projectId] });
-      setAddingNew(false);
+      setCreateSaved(true);
       toast('success', 'Section added');
+      setTimeout(() => {
+        setCreateSaved(false);
+        setAddingNew(false);
+      }, 1500);
     },
     onError: (err: Error) => toast('error', 'Failed to add section', err.message),
   });
@@ -672,10 +692,14 @@ function SectionsPanel({ projectId }: { projectId: number }) {
   const updateSection = useMutation({
     mutationFn: ({ id, data }: { id: number; data: object }) =>
       apiRequest('PATCH', `/api/admin/projects/${projectId}/sections/${id}`, data),
-    onSuccess: () => {
+    onSuccess: (_, { id }) => {
       qc.invalidateQueries({ queryKey: ['admin', 'sections', projectId] });
-      setEditingId(null);
+      setSavedSectionId(id);
       toast('success', 'Section saved');
+      setTimeout(() => {
+        setSavedSectionId(null);
+        setEditingId(null);
+      }, 1500);
     },
     onError: (err: Error) => toast('error', 'Failed to save section', err.message),
   });
@@ -728,6 +752,7 @@ function SectionsPanel({ projectId }: { projectId: number }) {
                     onSave={data => updateSection.mutate({ id: section.id, data })}
                     onCancel={() => setEditingId(null)}
                     saving={updateSection.isPending}
+                    saved={savedSectionId === section.id}
                   />
                 </div>
               ) : (
@@ -780,6 +805,7 @@ function SectionsPanel({ projectId }: { projectId: number }) {
           onSave={data => createSection.mutate(data)}
           onCancel={() => setAddingNew(false)}
           saving={createSection.isPending}
+          saved={createSaved}
         />
       )}
     </div>
@@ -1493,11 +1519,13 @@ function PostSectionEditor({
   onSave,
   onCancel,
   saving,
+  saved,
 }: {
   initial?: Partial<PostSection>;
   onSave: (data: Omit<PostSectionFormData, 'items' | 'btnLabel' | 'btnHref'> & { items: string; displayOrder?: number }) => void;
   onCancel: () => void;
   saving?: boolean;
+  saved?: boolean;
 }) {
   const [form, setForm] = useState<PostSectionFormData>({
     type: (initial?.type as PostSectionType) ?? 'text',
@@ -1794,8 +1822,26 @@ function PostSectionEditor({
       )}
 
       <div className="flex gap-2 pt-1">
-        <Button size="sm" onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : initial?.id ? 'Update section' : 'Add section'}</Button>
-        <Button size="sm" variant="outline" onClick={onCancel} disabled={saving}>Cancel</Button>
+        <Button
+          size="sm"
+          onClick={handleSave}
+          disabled={saving || saved}
+          className={cn('transition-colors duration-300', saved && 'bg-green-600 hover:bg-green-600 text-white border-green-600')}
+        >
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.span
+              key={saved ? 'saved' : saving ? 'saving' : 'idle'}
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              transition={{ duration: 0.15 }}
+              style={{ display: 'inline-flex', alignItems: 'center' }}
+            >
+              {saved ? 'Saved ✓' : saving ? <><Loader2 aria-hidden="true" className="animate-spin mr-1.5 h-3.5 w-3.5" />Saving…</> : initial?.id ? 'Update section' : 'Add section'}
+            </motion.span>
+          </AnimatePresence>
+        </Button>
+        <Button size="sm" variant="outline" onClick={onCancel} disabled={saving || saved}>Cancel</Button>
       </div>
     </div>
   );
@@ -1808,6 +1854,8 @@ function PostSectionsPanel({ postId }: { postId: number }) {
   const toast = useToast();
   const [addingNew, setAddingNew] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [savedSectionId, setSavedSectionId] = useState<number | null>(null);
+  const [createSaved, setCreateSaved] = useState(false);
 
   const { data: sections = [], isLoading } = useQuery<PostSection[]>({
     queryKey: ['admin', 'post-sections', postId],
@@ -1818,8 +1866,12 @@ function PostSectionsPanel({ postId }: { postId: number }) {
     mutationFn: (data: object) => apiRequest('POST', `/api/admin/posts/${postId}/sections`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'post-sections', postId] });
-      setAddingNew(false);
+      setCreateSaved(true);
       toast('success', 'Section added');
+      setTimeout(() => {
+        setCreateSaved(false);
+        setAddingNew(false);
+      }, 1500);
     },
     onError: (err: Error) => toast('error', 'Failed to add section', err.message),
   });
@@ -1827,10 +1879,14 @@ function PostSectionsPanel({ postId }: { postId: number }) {
   const updateSection = useMutation({
     mutationFn: ({ id, data }: { id: number; data: object }) =>
       apiRequest('PATCH', `/api/admin/post-sections/${id}`, data),
-    onSuccess: () => {
+    onSuccess: (_, { id }) => {
       qc.invalidateQueries({ queryKey: ['admin', 'post-sections', postId] });
-      setEditingId(null);
+      setSavedSectionId(id);
       toast('success', 'Section saved');
+      setTimeout(() => {
+        setSavedSectionId(null);
+        setEditingId(null);
+      }, 1500);
     },
     onError: (err: Error) => toast('error', 'Failed to save section', err.message),
   });
@@ -1904,6 +1960,7 @@ function PostSectionsPanel({ postId }: { postId: number }) {
                     onSave={data => updateSection.mutate({ id: section.id, data })}
                     onCancel={() => setEditingId(null)}
                     saving={updateSection.isPending}
+                    saved={savedSectionId === section.id}
                   />
                 </div>
               ) : (
@@ -1961,6 +2018,7 @@ function PostSectionsPanel({ postId }: { postId: number }) {
           onSave={data => createSection.mutate(data)}
           onCancel={() => setAddingNew(false)}
           saving={createSection.isPending}
+          saved={createSaved}
         />
       )}
     </div>
