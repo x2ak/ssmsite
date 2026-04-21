@@ -679,19 +679,25 @@ function ProjectForm({
     setVideoUploading(true);
     setVideoUploadError(null);
     try {
-      const formData = new FormData();
-      formData.append('video', file);
+      // Read as base64 data URL and send as JSON — avoids multipart connection drops
+      const data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error('Could not read file'));
+        reader.readAsDataURL(file);
+      });
       const response = await fetch('/api/admin/projects/upload-preview-video', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name, data }),
         credentials: 'include',
       });
       if (!response.ok) {
         const err = await response.json().catch(() => ({})) as { error?: string };
         throw new Error(err.error ?? 'Upload failed');
       }
-      const data = await response.json() as { url: string };
-      setForm(prev => ({ ...prev, previewVideoUrl: data.url }));
+      const result = await response.json() as { url: string };
+      setForm(prev => ({ ...prev, previewVideoUrl: result.url }));
     } catch (err) {
       setVideoUploadError(err instanceof Error ? err.message : 'Upload failed — try again');
     } finally {

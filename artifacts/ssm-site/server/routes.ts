@@ -211,54 +211,30 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  // Upload a preview GIF for a project thumbnail (10 MB limit)
+  // Upload a preview GIF for a project thumbnail.
+  // Uses base64 JSON body (not multipart) to avoid proxy connection drops on Replit/Railway.
   // Registered BEFORE /:id routes to avoid Express matching "upload-preview-video" as an id param.
   app.post('/api/admin/projects/upload-preview-video', requireAdmin, async (req, res) => {
-    let responded = false;
-    const reply = (status: number, body: object) => {
-      if (responded) return;
-      responded = true;
-      res.status(status).json(body);
-    };
-
-    req.on('aborted', () => {
-      reply(499, { error: 'Upload cancelled — the connection was closed before the file arrived.' });
-    });
-    req.on('close', () => {
-      if (!res.writableEnded) {
-        reply(499, { error: 'Upload cancelled — connection closed mid-transfer.' });
-      }
-    });
-
     try {
-      await new Promise<void>((resolve, reject) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        gifUpload.single('video')(req as any, res as any, (err: unknown) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-      const file = req.file;
-      if (!file) { reply(400, { error: 'No file received.' }); return; }
-      if (file.mimetype !== 'image/gif') {
-        reply(400, { error: `Only GIF files are accepted (received "${file.mimetype}").` }); return;
+      const { filename, data } = req.body as { filename?: string; data?: string };
+      if (!data || !filename) {
+        res.status(400).json({ error: 'Missing filename or file data.' }); return;
       }
-      const objectName = await uploadToGCS(file.buffer, file.originalname, file.mimetype);
-      const record = await createGalleryImage({
-        filename: file.originalname,
-        objectName,
-        contentType: file.mimetype,
-        label: 'preview-gif',
-      });
-      reply(201, { id: record.id, url: `/api/gallery/images/${record.id}` });
+      const match = data.match(/^data:(image\/gif);base64,(.+)$/s);
+      if (!match) {
+        res.status(400).json({ error: 'Only GIF files are accepted.' }); return;
+      }
+      const contentType = match[1];
+      const buffer = Buffer.from(match[2], 'base64');
+      if (buffer.length > 10 * 1024 * 1024) {
+        res.status(413).json({ error: 'GIF is too large — maximum is 10 MB.' }); return;
+      }
+      const objectName = await uploadToGCS(buffer, filename, contentType);
+      const record = await createGalleryImage({ filename, objectName, contentType, label: 'preview-gif' });
+      res.status(201).json({ id: record.id, url: `/api/gallery/images/${record.id}` });
     } catch (err: unknown) {
-      const multerErr = err as { code?: string; message?: string };
-      if (multerErr?.code === 'LIMIT_FILE_SIZE') {
-        reply(413, { error: 'GIF is too large — maximum is 10 MB.' });
-      } else {
-        console.error('Error uploading preview GIF:', err);
-        reply(500, { error: multerErr?.message || 'GIF upload failed — please try again.' });
-      }
+      console.error('Error uploading preview GIF:', err);
+      res.status(500).json({ error: 'GIF upload failed — please try again.' });
     }
   });
 
