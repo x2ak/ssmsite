@@ -34,7 +34,6 @@ import {
   updateProjectSection,
   deleteProjectSection,
   getSectionsByPostId,
-  getPostSectionsBySlug,
   createPostSection,
   updatePostSection,
   deletePostSection,

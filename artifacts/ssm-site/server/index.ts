@@ -73,11 +73,17 @@ if (isProd) {
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 
-app.listen(PORT, () => {
-  runMigrations().catch(err => console.error('[migrations] Failed:', err));
-  console.log(`SSM-LTD server running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
+async function start() {
+  await runMigrations();
+  app.listen(PORT, () => {
+    console.log(`SSM-LTD server running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
+    if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET === 'dev-secret-change-in-production') {
+      console.warn('⚠  SESSION_SECRET is not set or is using the development default. Change this in production.');
+    }
+  });
+}
 
-  if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET === 'dev-secret-change-in-production') {
-    console.warn('⚠  SESSION_SECRET is not set or is using the development default. Change this in production.');
-  }
+start().catch(err => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
 });

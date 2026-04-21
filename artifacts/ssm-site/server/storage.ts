@@ -1,6 +1,6 @@
 import { db } from './db';
 import { inquiries, projects, posts, adminUsers, knowledgeBase, galleryImages, projectSections, postSections } from '../shared/schema';
-import { eq, desc, asc, inArray } from 'drizzle-orm';
+import { eq, desc, asc } from 'drizzle-orm';
 import type { InsertInquiry, InsertProject, InsertPost, Inquiry, Project, Post, KnowledgeBaseEntry, InsertKnowledgeBaseEntry, GalleryImage, InsertGalleryImage, ProjectSection, InsertProjectSection, PostSection, InsertPostSection } from '../shared/schema';
 
 // ── Enquiries ─────────────────────────────────────────────────────────────────
