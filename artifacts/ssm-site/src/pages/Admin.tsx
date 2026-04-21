@@ -2407,10 +2407,14 @@ function KBForm({
   initial,
   onSave,
   onCancel,
+  saving,
+  saved,
 }: {
   initial?: Partial<KnowledgeBaseEntry>;
   onSave: (data: Partial<KnowledgeBaseEntry>) => void;
   onCancel: () => void;
+  saving?: boolean;
+  saved?: boolean;
 }) {
   const [form, setForm] = useState<Partial<KnowledgeBaseEntry>>({
     title: '',
@@ -2482,10 +2486,14 @@ function KBForm({
       </div>
 
       <div className="flex gap-3 pt-2">
-        <Button onClick={() => onSave(form)} disabled={!form.title?.trim() || !form.content?.trim()}>
-          Save entry
+        <Button
+          onClick={() => onSave(form)}
+          disabled={saving || saved || !form.title?.trim() || !form.content?.trim()}
+          className={cn(saved && 'bg-green-600 hover:bg-green-600 text-white border-green-600')}
+        >
+          {saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save entry'}
         </Button>
-        <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button variant="ghost" onClick={onCancel} disabled={saving || saved}>Cancel</Button>
       </div>
     </div>
   );
@@ -2496,6 +2504,7 @@ function AgentTab() {
   const toast = useToast();
   const [showForm, setShowForm] = useState(false);
   const [editingEntry, setEditingEntry] = useState<KnowledgeBaseEntry | null>(null);
+  const [savedEntryId, setSavedEntryId] = useState<number | null>(null);
 
   const { data: entries = [], isLoading } = useQuery<KnowledgeBaseEntry[]>({
     queryKey: ['admin', 'knowledge-base'],
@@ -2516,10 +2525,14 @@ function AgentTab() {
   const update = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<KnowledgeBaseEntry> }) =>
       apiRequest('PATCH', `/api/admin/knowledge-base/${id}`, data),
-    onSuccess: () => {
+    onSuccess: (_, { id }) => {
       qc.invalidateQueries({ queryKey: ['admin', 'knowledge-base'] });
-      setEditingEntry(null);
+      setSavedEntryId(id);
       toast('success', 'Entry updated');
+      setTimeout(() => {
+        setSavedEntryId(prev => (prev === id ? null : prev));
+        setEditingEntry(prev => (prev?.id === id ? null : prev));
+      }, 1500);
     },
     onError: (err: Error) => toast('error', 'Failed to update entry', err.message),
   });
@@ -2571,6 +2584,7 @@ function AgentTab() {
           <KBForm
             onSave={data => create.mutate(data)}
             onCancel={() => setShowForm(false)}
+            saving={create.isPending}
           />
         </div>
       )}
@@ -2598,6 +2612,8 @@ function AgentTab() {
                     initial={entry}
                     onSave={data => update.mutate({ id: entry.id, data })}
                     onCancel={() => setEditingEntry(null)}
+                    saving={update.isPending}
+                    saved={savedEntryId === entry.id}
                   />
                 </div>
               ) : (
