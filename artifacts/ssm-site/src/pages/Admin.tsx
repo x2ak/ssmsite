@@ -782,12 +782,14 @@ function ProjectForm({
   onSave,
   onCancel,
   saving,
+  saved,
   error,
 }: {
   initial?: Partial<Project>;
   onSave: (data: Partial<Project>) => void;
   onCancel: () => void;
   saving?: boolean;
+  saved?: boolean;
   error?: string | null;
 }) {
   const [form, setForm] = useState<Partial<Project>>({
@@ -1179,10 +1181,16 @@ function ProjectForm({
         </p>
       )}
       <div className="flex gap-3 pt-2">
-        <Button type="button" onClick={handleSave} size="sm" disabled={saving}>
-          {saving ? 'Saving…' : 'Save project'}
+        <Button
+          type="button"
+          onClick={handleSave}
+          size="sm"
+          disabled={saving || saved}
+          className={cn(saved && 'bg-green-600 hover:bg-green-600 text-white border-green-600')}
+        >
+          {saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save project'}
         </Button>
-        <Button type="button" variant="outline" onClick={onCancel} size="sm" disabled={saving}>
+        <Button type="button" variant="outline" onClick={onCancel} size="sm" disabled={saving || saved}>
           Cancel
         </Button>
       </div>
@@ -1194,6 +1202,7 @@ function PortfolioTab() {
   const qc = useQueryClient();
   const toast = useToast();
   const [editProject, setEditProject] = useState<Project | null>(null);
+  const [savedProjectId, setSavedProjectId] = useState<number | null>(null);
   const [addingNew, setAddingNew] = useState(false);
   const [sectionsOpenFor, setSectionsOpenFor] = useState<number | null>(null);
 
@@ -1222,11 +1231,15 @@ function PortfolioTab() {
   const updateProject = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<Project> }) =>
       apiRequest('PATCH', `/api/admin/projects/${id}`, data),
-    onSuccess: () => {
+    onSuccess: (_, { id }) => {
       qc.invalidateQueries({ queryKey: ['admin', 'projects'] });
-      setEditProject(null);
       setProjectError(null);
+      setSavedProjectId(id);
       toast('success', 'Project saved');
+      setTimeout(() => {
+        setSavedProjectId(prev => (prev === id ? null : prev));
+        setEditProject(prev => (prev?.id === id ? null : prev));
+      }, 1500);
     },
     onError: (err: Error) => {
       setProjectError(err.message || 'Failed to save project');
@@ -1285,6 +1298,7 @@ function PortfolioTab() {
                     onSave={data => updateProject.mutate({ id: project.id, data })}
                     onCancel={() => { setEditProject(null); setProjectError(null); }}
                     saving={updateProject.isPending}
+                    saved={savedProjectId === project.id}
                     error={projectError}
                   />
                 </div>
@@ -1939,10 +1953,14 @@ function PostEditor({
   initial,
   onSave,
   onCancel,
+  saving,
+  saved,
 }: {
   initial?: Partial<Post>;
   onSave: (data: Partial<Post>) => void;
   onCancel: () => void;
+  saving?: boolean;
+  saved?: boolean;
 }) {
   const [form, setForm] = useState<Partial<Post>>({
     title: '',
@@ -2101,8 +2119,15 @@ function PostEditor({
         Published
       </label>
       <div className="flex gap-3 pt-2">
-        <Button onClick={() => onSave(form)} size="sm">Save post</Button>
-        <Button variant="outline" onClick={onCancel} size="sm">Cancel</Button>
+        <Button
+          onClick={() => onSave(form)}
+          size="sm"
+          disabled={saving || saved}
+          className={cn(saved && 'bg-green-600 hover:bg-green-600 text-white border-green-600')}
+        >
+          {saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save post'}
+        </Button>
+        <Button variant="outline" onClick={onCancel} size="sm" disabled={saving || saved}>Cancel</Button>
       </div>
     </div>
   );
@@ -2112,6 +2137,7 @@ function BlogTab() {
   const qc = useQueryClient();
   const toast = useToast();
   const [editPost, setEditPost] = useState<Post | null>(null);
+  const [savedPostId, setSavedPostId] = useState<number | null>(null);
   const [addingNew, setAddingNew] = useState(false);
   const [sectionsPostId, setSectionsPostId] = useState<number | null>(null);
 
@@ -2134,10 +2160,14 @@ function BlogTab() {
   const updatePost = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<Post> }) =>
       apiRequest('PATCH', `/api/admin/posts/${id}`, data),
-    onSuccess: () => {
+    onSuccess: (_, { id }) => {
       qc.invalidateQueries({ queryKey: ['admin', 'posts'] });
-      setEditPost(null);
+      setSavedPostId(id);
       toast('success', 'Post saved');
+      setTimeout(() => {
+        setSavedPostId(prev => (prev === id ? null : prev));
+        setEditPost(prev => (prev?.id === id ? null : prev));
+      }, 1500);
     },
     onError: (err: Error) => toast('error', 'Failed to save post', err.message),
   });
@@ -2189,6 +2219,8 @@ function BlogTab() {
                     initial={editPost}
                     onSave={data => updatePost.mutate({ id: post.id, data })}
                     onCancel={() => setEditPost(null)}
+                    saving={updatePost.isPending}
+                    saved={savedPostId === post.id}
                   />
                 </div>
               ) : (
