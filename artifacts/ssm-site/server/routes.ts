@@ -327,7 +327,12 @@ export function registerRoutes(app: Express) {
 
   app.get('/api/posts/:slug/sections', async (req, res) => {
     try {
-      const sections = await getPostSectionsBySlug(req.params.slug);
+      const post = await getPostBySlug(req.params.slug);
+      if (!post || !post.published) {
+        res.status(404).json({ error: 'Post not found' });
+        return;
+      }
+      const sections = await getSectionsByPostId(post.id);
       res.json(sections);
     } catch (err) {
       console.error('Error fetching post sections:', err);

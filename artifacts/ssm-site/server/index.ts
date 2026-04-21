@@ -6,6 +6,7 @@ import pg from 'pg';
 import path from 'path';
 import { registerAuthRoutes } from './auth';
 import { registerRoutes } from './routes';
+import { runMigrations } from './migrations';
 
 const distDir = path.resolve(process.cwd(), 'dist/public');
 
@@ -73,6 +74,7 @@ if (isProd) {
 // ── Start ─────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
+  runMigrations().catch(err => console.error('[migrations] Failed:', err));
   console.log(`SSM-LTD server running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
 
   if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET === 'dev-secret-change-in-production') {

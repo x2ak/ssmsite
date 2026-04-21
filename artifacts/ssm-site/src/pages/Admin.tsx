@@ -1562,6 +1562,26 @@ function PostSectionEditor({
             <Input value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g. ⚠ Incident Origin" />
           </div>
           <div className="space-y-1.5">
+            <Label>Accent colour <span className="text-muted-foreground font-normal">(optional)</span></Label>
+            <div className="flex gap-2">
+              {(['none', 'primary', 'warning', 'danger'] as const).map(v => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => set('variant', v === 'none' ? '' : v)}
+                  className={cn(
+                    'px-3 py-1.5 text-xs rounded-[var(--radius)] border transition-colors cursor-pointer capitalize',
+                    (form.variant || 'none') === v
+                      ? 'border-primary bg-primary/10 text-primary font-medium'
+                      : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
+                  )}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-1.5">
             <Label>Body (Markdown)</Label>
             <Textarea value={form.body} onChange={e => set('body', e.target.value)} rows={5} className="font-mono text-sm" placeholder="Card content…" />
           </div>

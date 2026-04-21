@@ -96,11 +96,18 @@ function AlertSection({ section }: { section: PostSection }) {
   );
 }
 
+const CARD_VARIANT: Record<string, { border: string; label: string }> = {
+  primary: { border: 'border-l-4 border-l-primary', label: 'text-primary' },
+  warning: { border: 'border-l-4 border-l-amber-500 dark:border-l-amber-400', label: 'text-amber-600 dark:text-amber-400' },
+  danger:  { border: 'border-l-4 border-l-destructive', label: 'text-destructive' },
+};
+
 function CardSection({ section }: { section: PostSection }) {
+  const variant = CARD_VARIANT[section.variant ?? ''];
   return (
-    <div className="bg-card border border-border rounded-[var(--radius)] p-5">
+    <div className={`bg-card border border-border rounded-[var(--radius)] p-5 ${variant?.border ?? ''}`}>
       {section.title && (
-        <p className="font-mono text-[10px] uppercase tracking-widest text-primary mb-3">
+        <p className={`font-mono text-[10px] uppercase tracking-widest mb-3 ${variant?.label ?? 'text-primary'}`}>
           {section.title}
         </p>
       )}
