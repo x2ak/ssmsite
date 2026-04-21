@@ -20,7 +20,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@
 import { apiRequest } from '@/lib/queryClient';
 import { formatDate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
-import type { Inquiry, Project, Post, KnowledgeBaseEntry, GalleryImage, ProjectSection } from '@shared/schema';
+import type { Inquiry, Project, Post, KnowledgeBaseEntry, GalleryImage, ProjectSection, PostSection } from '@shared/schema';
 
 // ── Upload helper — XHR so we get progress events ─────────────────────────────
 
@@ -1237,6 +1237,549 @@ function PortfolioTab() {
 
 // ── Blog tab ──────────────────────────────────────────────────────────────────
 
+// ── Post Section Editor ───────────────────────────────────────────────────────
+
+const POST_SECTION_TYPES = [
+  { value: 'text',      label: 'Text',        desc: 'Markdown prose block' },
+  { value: 'photo',     label: 'Photo',       desc: 'Full-width image' },
+  { value: 'callout',   label: 'Callout',     desc: 'Pull quote or highlight' },
+  { value: 'alert',     label: 'Alert',       desc: 'Info / warning / success banner' },
+  { value: 'card',      label: 'Card',        desc: 'Bordered card with label' },
+  { value: 'timeline',  label: 'Timeline',    desc: 'Ordered steps list' },
+  { value: 'checklist', label: 'Checklist',   desc: 'Ticked items list' },
+  { value: 'cta',       label: 'CTA',         desc: 'Call-to-action block' },
+] as const;
+
+type PostSectionType = typeof POST_SECTION_TYPES[number]['value'];
+
+const TYPE_BADGE: Record<PostSectionType, string> = {
+  text:      'bg-muted text-muted-foreground',
+  photo:     'bg-primary/10 text-primary',
+  callout:   'bg-primary/10 text-primary',
+  alert:     'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  card:      'bg-muted text-muted-foreground',
+  timeline:  'bg-primary/10 text-primary',
+  checklist: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+  cta:       'bg-primary/15 text-primary',
+};
+
+function ItemsListBuilder({
+  items,
+  onChange,
+  placeholder,
+}: {
+  items: string[];
+  onChange: (items: string[]) => void;
+  placeholder?: string;
+}) {
+  function add() { onChange([...items, '']); }
+  function remove(i: number) { onChange(items.filter((_, idx) => idx !== i)); }
+  function update(i: number, v: string) { onChange(items.map((it, idx) => idx === i ? v : it)); }
+  function moveUp(i: number) {
+    if (i === 0) return;
+    const next = [...items];
+    [next[i - 1], next[i]] = [next[i], next[i - 1]];
+    onChange(next);
+  }
+  function moveDown(i: number) {
+    if (i === items.length - 1) return;
+    const next = [...items];
+    [next[i], next[i + 1]] = [next[i + 1], next[i]];
+    onChange(next);
+  }
+  return (
+    <div className="space-y-2">
+      {items.map((item, i) => (
+        <div key={i} className="flex gap-2 items-start">
+          <div className="flex flex-col gap-0.5">
+            <button type="button" onClick={() => moveUp(i)} disabled={i === 0}
+              className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors">
+              <ChevronUp size={11} />
+            </button>
+            <button type="button" onClick={() => moveDown(i)} disabled={i === items.length - 1}
+              className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors">
+              <ChevronDown size={11} />
+            </button>
+          </div>
+          <Textarea
+            value={item}
+            onChange={e => update(i, e.target.value)}
+            rows={2}
+            className="flex-1 text-sm"
+            placeholder={placeholder ?? 'Enter item text…'}
+          />
+          <button type="button" onClick={() => remove(i)}
+            className="mt-1 h-6 w-6 flex items-center justify-center rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors flex-shrink-0">
+            <X size={12} />
+          </button>
+        </div>
+      ))}
+      <button type="button" onClick={add}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-[var(--radius)] border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors cursor-pointer">
+        <Plus size={11} />
+        Add item
+      </button>
+    </div>
+  );
+}
+
+interface PostSectionFormData {
+  type: PostSectionType;
+  title: string;
+  body: string;
+  imageUrl: string;
+  caption: string;
+  variant: string;
+  items: string[];
+  btnLabel: string;
+  btnHref: string;
+}
+
+function PostSectionEditor({
+  initial,
+  onSave,
+  onCancel,
+  saving,
+}: {
+  initial?: Partial<PostSection>;
+  onSave: (data: Omit<PostSectionFormData, 'items' | 'btnLabel' | 'btnHref'> & { items: string; displayOrder?: number }) => void;
+  onCancel: () => void;
+  saving?: boolean;
+}) {
+  const [form, setForm] = useState<PostSectionFormData>({
+    type: (initial?.type as PostSectionType) ?? 'text',
+    title: initial?.title ?? '',
+    body: initial?.body ?? '',
+    imageUrl: initial?.imageUrl ?? '',
+    caption: initial?.caption ?? '',
+    variant: initial?.variant ?? 'info',
+    items: (() => {
+      if (!initial?.items) return [];
+      try {
+        const p = JSON.parse(initial.items);
+        if (initial.type === 'cta') return [];
+        return Array.isArray(p) ? p : [];
+      } catch { return []; }
+    })(),
+    btnLabel: (() => {
+      if (initial?.type !== 'cta' || !initial?.items) return 'Get in touch';
+      try { return (JSON.parse(initial.items) as { btnLabel?: string }).btnLabel ?? 'Get in touch'; } catch { return 'Get in touch'; }
+    })(),
+    btnHref: (() => {
+      if (initial?.type !== 'cta' || !initial?.items) return '/contact';
+      try { return (JSON.parse(initial.items) as { btnHref?: string }).btnHref ?? '/contact'; } catch { return '/contact'; }
+    })(),
+  });
+
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function set<K extends keyof PostSectionFormData>(k: K, v: PostSectionFormData[K]) {
+    setForm(p => ({ ...p, [k]: v }));
+  }
+
+  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadProgress(0);
+    setUploadError(null);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      const img = await xhrUpload<{ id: number }>(
+        '/api/admin/gallery/upload',
+        formData,
+        {},
+        pct => setUploadProgress(pct),
+      );
+      set('imageUrl', `/api/gallery/images/${img.id}`);
+      setUploadProgress(null);
+    } catch (err) {
+      setUploadError((err as Error).message || 'Upload failed');
+      setUploadProgress(null);
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
+  function buildItemsString(): string {
+    if (form.type === 'cta') {
+      return JSON.stringify({ btnLabel: form.btnLabel, btnHref: form.btnHref });
+    }
+    if (form.type === 'timeline' || form.type === 'checklist') {
+      return JSON.stringify(form.items);
+    }
+    return '';
+  }
+
+  function handleSave() {
+    onSave({
+      type: form.type,
+      title: form.title,
+      body: form.body,
+      imageUrl: form.imageUrl,
+      caption: form.caption,
+      variant: form.variant,
+      items: buildItemsString(),
+    });
+  }
+
+  const t = form.type;
+
+  return (
+    <div className="space-y-4 border border-border rounded-[var(--radius)] bg-muted/20 p-4">
+      {/* Type picker */}
+      {!initial?.id && (
+        <div className="space-y-1.5">
+          <Label>Section type</Label>
+          <div className="flex flex-wrap gap-2">
+            {POST_SECTION_TYPES.map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => set('type', opt.value)}
+                className={cn(
+                  'px-3 py-1.5 text-xs rounded-[var(--radius)] border transition-colors cursor-pointer',
+                  form.type === opt.value
+                    ? 'border-primary bg-primary/10 text-primary font-medium'
+                    : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
+                )}
+                title={opt.desc}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Text */}
+      {t === 'text' && (
+        <>
+          <div className="space-y-1.5">
+            <Label>Heading <span className="text-muted-foreground font-normal">(optional)</span></Label>
+            <Input value={form.title} onChange={e => set('title', e.target.value)} placeholder="Section heading" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Body (Markdown)</Label>
+            <Textarea value={form.body} onChange={e => set('body', e.target.value)} rows={8} className="font-mono text-sm" placeholder="Write your content…" />
+          </div>
+        </>
+      )}
+
+      {/* Photo */}
+      {t === 'photo' && (
+        <>
+          <div className="space-y-1.5">
+            <Label>Image</Label>
+            {form.imageUrl && (
+              <img src={form.imageUrl} alt="" className="w-full max-h-48 object-cover rounded-[var(--radius)] border border-border mb-2" />
+            )}
+            <div className="flex items-center gap-2">
+              <Input
+                value={form.imageUrl}
+                onChange={e => set('imageUrl', e.target.value)}
+                placeholder="https://… or use upload"
+                className="flex-1"
+              />
+              <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadProgress !== null}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-[var(--radius)] border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap flex-shrink-0"
+              >
+                <Upload size={11} />
+                {uploadProgress !== null ? `${uploadProgress}%` : 'Upload'}
+              </button>
+            </div>
+            {uploadError && <p className="text-xs text-destructive">{uploadError}</p>}
+            {uploadProgress !== null && uploadProgress < 100 && (
+              <div className="h-1 rounded bg-muted overflow-hidden"><div className="h-full bg-primary transition-all" style={{ width: `${uploadProgress}%` }} /></div>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <Label>Caption <span className="text-muted-foreground font-normal">(optional)</span></Label>
+            <Input value={form.caption} onChange={e => set('caption', e.target.value)} placeholder="Describe the image" />
+          </div>
+        </>
+      )}
+
+      {/* Callout */}
+      {t === 'callout' && (
+        <>
+          <div className="space-y-1.5">
+            <Label>Quote / highlight text</Label>
+            <Textarea value={form.body} onChange={e => set('body', e.target.value)} rows={3} placeholder="'The quote or key point…'" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Attribution <span className="text-muted-foreground font-normal">(optional)</span></Label>
+            <Input value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g. John Smith, CEO" />
+          </div>
+        </>
+      )}
+
+      {/* Alert */}
+      {t === 'alert' && (
+        <>
+          <div className="space-y-1.5">
+            <Label>Variant</Label>
+            <div className="flex gap-2">
+              {(['info', 'warning', 'success'] as const).map(v => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => set('variant', v)}
+                  className={cn(
+                    'px-3 py-1.5 text-xs rounded-[var(--radius)] border transition-colors cursor-pointer capitalize',
+                    form.variant === v
+                      ? 'border-primary bg-primary/10 text-primary font-medium'
+                      : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
+                  )}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Label <span className="text-muted-foreground font-normal">(optional — overrides default)</span></Label>
+            <Input value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g. INCIDENT NOTICE" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Message</Label>
+            <Textarea value={form.body} onChange={e => set('body', e.target.value)} rows={3} placeholder="Alert message text…" />
+          </div>
+        </>
+      )}
+
+      {/* Card */}
+      {t === 'card' && (
+        <>
+          <div className="space-y-1.5">
+            <Label>Card label <span className="text-muted-foreground font-normal">(mono, uppercase)</span></Label>
+            <Input value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g. ⚠ Incident Origin" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Body (Markdown)</Label>
+            <Textarea value={form.body} onChange={e => set('body', e.target.value)} rows={5} className="font-mono text-sm" placeholder="Card content…" />
+          </div>
+        </>
+      )}
+
+      {/* Timeline */}
+      {t === 'timeline' && (
+        <>
+          <div className="space-y-1.5">
+            <Label>Heading <span className="text-muted-foreground font-normal">(optional)</span></Label>
+            <Input value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g. Our Response" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Steps (in order)</Label>
+            <ItemsListBuilder items={form.items} onChange={v => set('items', v)} placeholder="Describe this step…" />
+          </div>
+        </>
+      )}
+
+      {/* Checklist */}
+      {t === 'checklist' && (
+        <>
+          <div className="space-y-1.5">
+            <Label>Heading <span className="text-muted-foreground font-normal">(optional)</span></Label>
+            <Input value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g. What We Did — In Full" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Items</Label>
+            <ItemsListBuilder items={form.items} onChange={v => set('items', v)} placeholder="Checklist item…" />
+          </div>
+        </>
+      )}
+
+      {/* CTA */}
+      {t === 'cta' && (
+        <>
+          <div className="space-y-1.5">
+            <Label>Heading</Label>
+            <Input value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g. Security you can rely on." />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Subtext</Label>
+            <Textarea value={form.body} onChange={e => set('body', e.target.value)} rows={2} placeholder="Short supporting sentence…" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Button label</Label>
+              <Input value={form.btnLabel} onChange={e => set('btnLabel', e.target.value)} placeholder="Contact SSM-LTD" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Button link</Label>
+              <Input value={form.btnHref} onChange={e => set('btnHref', e.target.value)} placeholder="/contact" />
+            </div>
+          </div>
+        </>
+      )}
+
+      <div className="flex gap-2 pt-1">
+        <Button size="sm" onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : initial?.id ? 'Update section' : 'Add section'}</Button>
+        <Button size="sm" variant="outline" onClick={onCancel} disabled={saving}>Cancel</Button>
+      </div>
+    </div>
+  );
+}
+
+// ── Post Sections Panel ───────────────────────────────────────────────────────
+
+function PostSectionsPanel({ postId }: { postId: number }) {
+  const qc = useQueryClient();
+  const [addingNew, setAddingNew] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+
+  const { data: sections = [], isLoading } = useQuery<PostSection[]>({
+    queryKey: ['admin', 'post-sections', postId],
+    queryFn: () => apiRequest<PostSection[]>('GET', `/api/admin/posts/${postId}/sections`),
+  });
+
+  const createSection = useMutation({
+    mutationFn: (data: object) => apiRequest('POST', `/api/admin/posts/${postId}/sections`, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin', 'post-sections', postId] }); setAddingNew(false); },
+  });
+
+  const updateSection = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: object }) =>
+      apiRequest('PATCH', `/api/admin/post-sections/${id}`, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin', 'post-sections', postId] }); setEditingId(null); },
+  });
+
+  const deleteSection = useMutation({
+    mutationFn: (id: number) => apiRequest('DELETE', `/api/admin/post-sections/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'post-sections', postId] }),
+  });
+
+  const reorder = useMutation({
+    mutationFn: (ids: number[]) => apiRequest('POST', '/api/admin/post-sections/reorder', { ids }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'post-sections', postId] }),
+  });
+
+  function moveSection(idx: number, dir: -1 | 1) {
+    const newSections = [...sections];
+    const target = idx + dir;
+    if (target < 0 || target >= newSections.length) return;
+    [newSections[idx], newSections[target]] = [newSections[target], newSections[idx]];
+    reorder.mutate(newSections.map(s => s.id));
+  }
+
+  function previewText(s: PostSection) {
+    if (s.title) return s.title;
+    if (s.body) return s.body.slice(0, 60) + (s.body.length > 60 ? '…' : '');
+    if (s.type === 'photo') return s.imageUrl ? '📷 Photo' : 'Photo (no image yet)';
+    return '—';
+  }
+
+  const typeBadgeClass = (type: string) =>
+    TYPE_BADGE[type as PostSectionType] ?? 'bg-muted text-muted-foreground';
+
+  return (
+    <div className="border-t border-border bg-muted/10 px-4 py-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <h4 className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+          Content Sections
+        </h4>
+        {!addingNew && (
+          <button
+            onClick={() => setAddingNew(true)}
+            className="flex items-center gap-1.5 px-3 py-1 text-xs rounded-[var(--radius)] border border-primary/40 text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+          >
+            <Plus size={11} />
+            Add section
+          </button>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2">
+          {[...Array(2)].map((_, i) => <div key={i} className="h-10 bg-muted animate-pulse rounded-[var(--radius)]" />)}
+        </div>
+      ) : sections.length === 0 && !addingNew ? (
+        <p className="text-xs text-muted-foreground py-2">
+          No sections yet. Add one to build this post with rich typed blocks.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {sections.map((section, idx) => (
+            <div key={section.id} className="border border-border rounded-[var(--radius)] bg-card overflow-hidden">
+              {editingId === section.id ? (
+                <div className="p-3">
+                  <PostSectionEditor
+                    initial={section}
+                    onSave={data => updateSection.mutate({ id: section.id, data })}
+                    onCancel={() => setEditingId(null)}
+                    saving={updateSection.isPending}
+                  />
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 px-3 py-2">
+                  <div className="flex flex-col gap-0.5 flex-shrink-0">
+                    <button
+                      onClick={() => moveSection(idx, -1)}
+                      disabled={idx === 0 || reorder.isPending}
+                      className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
+                    >
+                      <ChevronUp size={11} />
+                    </button>
+                    <button
+                      onClick={() => moveSection(idx, 1)}
+                      disabled={idx === sections.length - 1 || reorder.isPending}
+                      className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
+                    >
+                      <ChevronDown size={11} />
+                    </button>
+                  </div>
+                  <span className={cn(
+                    'font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-sm flex-shrink-0',
+                    typeBadgeClass(section.type)
+                  )}>
+                    {section.type}
+                  </span>
+                  <p className="text-sm text-foreground truncate flex-1 min-w-0">
+                    {previewText(section)}
+                  </p>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => setEditingId(section.id)}
+                      className="h-7 w-7 flex items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <Edit2 size={12} />
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (confirm('Delete this section?')) deleteSection.mutate(section.id);
+                      }}
+                      className="h-7 w-7 flex items-center justify-center rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {addingNew && (
+        <PostSectionEditor
+          onSave={data => createSection.mutate(data)}
+          onCancel={() => setAddingNew(false)}
+          saving={createSection.isPending}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Post Editor ───────────────────────────────────────────────────────────────
+
 function PostEditor({
   initial,
   onSave,
@@ -1322,6 +1865,7 @@ function BlogTab() {
   const qc = useQueryClient();
   const [editPost, setEditPost] = useState<Post | null>(null);
   const [addingNew, setAddingNew] = useState(false);
+  const [sectionsPostId, setSectionsPostId] = useState<number | null>(null);
 
   const { data: posts = [], isLoading } = useQuery<Post[]>({
     queryKey: ['admin', 'posts'],
@@ -1392,39 +1936,57 @@ function BlogTab() {
                   />
                 </div>
               ) : (
-                <div className="flex items-center justify-between px-4 py-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium text-sm text-foreground truncate">{post.title}</p>
-                      <Badge variant={post.published ? 'default' : 'muted'}>
-                        {post.published ? 'Published' : 'Draft'}
-                      </Badge>
+                <>
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-sm text-foreground truncate">{post.title}</p>
+                        <Badge variant={post.published ? 'default' : 'muted'}>
+                          {post.published ? 'Published' : 'Draft'}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDate(post.createdAt!)} · /{post.slug}
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      {formatDate(post.createdAt!)} · /{post.slug}
-                    </p>
+                    <div className="flex items-center gap-1 ml-4 flex-shrink-0">
+                      <button
+                        onClick={() => setSectionsPostId(sectionsPostId === post.id ? null : post.id)}
+                        className={cn(
+                          'h-7 w-7 flex items-center justify-center rounded-[var(--radius)] transition-colors',
+                          sectionsPostId === post.id
+                            ? 'bg-primary/10 text-primary'
+                            : 'hover:bg-muted text-muted-foreground hover:text-foreground'
+                        )}
+                        aria-label="Edit sections"
+                        title="Content sections"
+                      >
+                        <Layers size={13} />
+                      </button>
+                      <button
+                        onClick={() => { setEditPost(post); setSectionsPostId(null); }}
+                        className="h-7 w-7 flex items-center justify-center rounded-[var(--radius)] hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        aria-label="Edit post"
+                      >
+                        <Edit2 size={13} />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm(`Delete "${post.title}"?`)) {
+                            deletePost.mutate(post.id);
+                          }
+                        }}
+                        className="h-7 w-7 flex items-center justify-center rounded-[var(--radius)] hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                        aria-label="Delete post"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 ml-4 flex-shrink-0">
-                    <button
-                      onClick={() => setEditPost(post)}
-                      className="h-7 w-7 flex items-center justify-center rounded-[var(--radius)] hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                      aria-label="Edit post"
-                    >
-                      <Edit2 size={13} />
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (confirm(`Delete "${post.title}"?`)) {
-                          deletePost.mutate(post.id);
-                        }
-                      }}
-                      className="h-7 w-7 flex items-center justify-center rounded-[var(--radius)] hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                      aria-label="Delete post"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                </div>
+                  {sectionsPostId === post.id && (
+                    <PostSectionsPanel postId={post.id} />
+                  )}
+                </>
               )}
             </div>
           ))}

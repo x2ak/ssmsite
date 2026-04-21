@@ -7,7 +7,8 @@ import { useState } from 'react';
 import { Layout } from '@/components/Layout';
 import { apiRequest } from '@/lib/queryClient';
 import { formatDate, estimateReadTime } from '@/lib/utils';
-import type { Post } from '@shared/schema';
+import { PostSectionRenderer } from '@/components/PostSectionRenderer';
+import type { Post, PostSection } from '@shared/schema';
 
 export default function BlogPost() {
   const [, params] = useRoute('/blog/:slug');
@@ -20,11 +21,19 @@ export default function BlogPost() {
     enabled: !!slug,
   });
 
+  const { data: sections = [] } = useQuery<PostSection[]>({
+    queryKey: ['post-sections', slug],
+    queryFn: () => apiRequest<PostSection[]>('GET', `/api/posts/${slug}/sections`),
+    enabled: !!slug && !!post,
+  });
+
   function handleCopyLink() {
     navigator.clipboard.writeText(window.location.href);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
+
+  const useSections = sections.length > 0;
 
   return (
     <Layout>
@@ -96,10 +105,18 @@ export default function BlogPost() {
               {post.excerpt}
             </p>
 
-            {/* Content */}
-            <div className="prose max-w-none">
-              <ReactMarkdown>{post.content}</ReactMarkdown>
-            </div>
+            {/* Content — sections if available, fallback to markdown */}
+            {useSections ? (
+              <div className="space-y-10">
+                {sections.map(section => (
+                  <PostSectionRenderer key={section.id} section={section} />
+                ))}
+              </div>
+            ) : (
+              <div className="prose max-w-none">
+                <ReactMarkdown>{post.content}</ReactMarkdown>
+              </div>
+            )}
 
             {/* Share */}
             <div className="mt-16 pt-8 border-t border-border flex items-center justify-between">

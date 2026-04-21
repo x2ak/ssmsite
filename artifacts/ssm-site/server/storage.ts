@@ -1,7 +1,7 @@
 import { db } from './db';
-import { inquiries, projects, posts, adminUsers, knowledgeBase, galleryImages, projectSections } from '../shared/schema';
-import { eq, desc, asc } from 'drizzle-orm';
-import type { InsertInquiry, InsertProject, InsertPost, Inquiry, Project, Post, KnowledgeBaseEntry, InsertKnowledgeBaseEntry, GalleryImage, InsertGalleryImage, ProjectSection, InsertProjectSection } from '../shared/schema';
+import { inquiries, projects, posts, adminUsers, knowledgeBase, galleryImages, projectSections, postSections } from '../shared/schema';
+import { eq, desc, asc, inArray } from 'drizzle-orm';
+import type { InsertInquiry, InsertProject, InsertPost, Inquiry, Project, Post, KnowledgeBaseEntry, InsertKnowledgeBaseEntry, GalleryImage, InsertGalleryImage, ProjectSection, InsertProjectSection, PostSection, InsertPostSection } from '../shared/schema';
 
 // ── Enquiries ─────────────────────────────────────────────────────────────────
 
@@ -167,6 +167,48 @@ export async function updateProjectSection(id: number, data: Partial<InsertProje
 
 export async function deleteProjectSection(id: number): Promise<void> {
   await db.delete(projectSections).where(eq(projectSections.id, id));
+}
+
+// ── Post sections ─────────────────────────────────────────────────────────────
+
+export async function getSectionsByPostId(postId: number): Promise<PostSection[]> {
+  return db
+    .select()
+    .from(postSections)
+    .where(eq(postSections.postId, postId))
+    .orderBy(asc(postSections.displayOrder), asc(postSections.createdAt));
+}
+
+export async function getPostSectionsBySlug(slug: string): Promise<PostSection[]> {
+  const [post] = await db.select().from(posts).where(eq(posts.slug, slug));
+  if (!post) return [];
+  return getSectionsByPostId(post.id);
+}
+
+export async function createPostSection(data: InsertPostSection): Promise<PostSection> {
+  const [section] = await db.insert(postSections).values(data).returning();
+  return section;
+}
+
+export async function updatePostSection(id: number, data: Partial<InsertPostSection>): Promise<PostSection> {
+  const [section] = await db
+    .update(postSections)
+    .set(data)
+    .where(eq(postSections.id, id))
+    .returning();
+  return section;
+}
+
+export async function deletePostSection(id: number): Promise<void> {
+  await db.delete(postSections).where(eq(postSections.id, id));
+}
+
+export async function reorderPostSections(ids: number[]): Promise<void> {
+  await Promise.all(
+    ids.map((id, idx) =>
+      db.update(postSections).set({ displayOrder: idx }).where(eq(postSections.id, id))
+    )
+  );
 }
 
 // ── Admin users ───────────────────────────────────────────────────────────────

@@ -33,6 +33,12 @@ import {
   createProjectSection,
   updateProjectSection,
   deleteProjectSection,
+  getSectionsByPostId,
+  getPostSectionsBySlug,
+  createPostSection,
+  updatePostSection,
+  deletePostSection,
+  reorderPostSections,
 } from './storage';
 import { uploadToGCS, streamGalleryImage, deleteFromGCS } from './imageStorage';
 import { insertInquirySchema } from '../shared/schema';
@@ -314,6 +320,90 @@ export function registerRoutes(app: Express) {
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to delete section' });
+    }
+  });
+
+  // ── Post sections (public) ────────────────────────────────────────────────
+
+  app.get('/api/posts/:slug/sections', async (req, res) => {
+    try {
+      const sections = await getPostSectionsBySlug(req.params.slug);
+      res.json(sections);
+    } catch (err) {
+      console.error('Error fetching post sections:', err);
+      res.status(500).json({ error: 'Failed to fetch post sections' });
+    }
+  });
+
+  // ── Admin — Post Sections ─────────────────────────────────────────────────
+
+  app.get('/api/admin/posts/:id/sections', requireAdmin, async (req, res) => {
+    try {
+      const postId = parseInt(req.params.id, 10);
+      const sections = await getSectionsByPostId(postId);
+      res.json(sections);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch post sections' });
+    }
+  });
+
+  app.post('/api/admin/posts/:id/sections', requireAdmin, async (req, res) => {
+    try {
+      const postId = parseInt(req.params.id, 10);
+      const { type, title, body, imageUrl, caption, variant, items, displayOrder } = req.body as {
+        type?: string; title?: string; body?: string; imageUrl?: string;
+        caption?: string; variant?: string; items?: string; displayOrder?: number;
+      };
+      const section = await createPostSection({
+        postId,
+        type: type ?? 'text',
+        title: title ?? null,
+        body: body ?? null,
+        imageUrl: imageUrl ?? null,
+        caption: caption ?? null,
+        variant: variant ?? null,
+        items: items ?? null,
+        displayOrder: displayOrder ?? 0,
+      });
+      res.status(201).json(section);
+    } catch (err) {
+      console.error('Error creating post section:', err);
+      res.status(500).json({ error: 'Failed to create post section' });
+    }
+  });
+
+  app.patch('/api/admin/post-sections/:sectionId', requireAdmin, async (req, res) => {
+    try {
+      const sectionId = parseInt(req.params.sectionId, 10);
+      const { id: _id, createdAt: _ca, postId: _pid, ...data } = req.body as Record<string, unknown>;
+      const section = await updatePostSection(sectionId, data as Parameters<typeof updatePostSection>[1]);
+      res.json(section);
+    } catch (err) {
+      console.error('Error updating post section:', err);
+      res.status(500).json({ error: 'Failed to update post section' });
+    }
+  });
+
+  app.delete('/api/admin/post-sections/:sectionId', requireAdmin, async (req, res) => {
+    try {
+      const sectionId = parseInt(req.params.sectionId, 10);
+      await deletePostSection(sectionId);
+      res.json({ success: true });
+    } catch (err) {
+      console.error('Error deleting post section:', err);
+      res.status(500).json({ error: 'Failed to delete post section' });
+    }
+  });
+
+  app.post('/api/admin/post-sections/reorder', requireAdmin, async (req, res) => {
+    try {
+      const { ids } = req.body as { ids: number[] };
+      if (!Array.isArray(ids)) { res.status(400).json({ error: 'ids must be an array' }); return; }
+      await reorderPostSections(ids);
+      res.json({ success: true });
+    } catch (err) {
+      console.error('Error reordering post sections:', err);
+      res.status(500).json({ error: 'Failed to reorder post sections' });
     }
   });
 

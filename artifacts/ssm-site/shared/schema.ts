@@ -91,6 +91,22 @@ export const projectSections = pgTable('project_sections', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
+// Post sections — typed content blocks for rich blog post composition
+// type: 'text' | 'photo' | 'callout' | 'alert' | 'card' | 'timeline' | 'checklist' | 'cta'
+export const postSections = pgTable('post_sections', {
+  id: serial('id').primaryKey(),
+  postId: integer('post_id').notNull(),
+  type: text('type').notNull().default('text'),
+  title: text('title'),
+  body: text('body'),
+  imageUrl: text('image_url'),
+  caption: text('caption'),
+  variant: text('variant'),
+  items: text('items'),
+  displayOrder: integer('display_order').default(0),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
 // Zod schemas
 export const insertKnowledgeBaseSchema = createInsertSchema(knowledgeBase);
 export const selectKnowledgeBaseSchema = createSelectSchema(knowledgeBase);
@@ -122,3 +138,5 @@ export type GalleryImage = typeof galleryImages.$inferSelect;
 export type InsertGalleryImage = typeof galleryImages.$inferInsert;
 export type ProjectSection = typeof projectSections.$inferSelect;
 export type InsertProjectSection = typeof projectSections.$inferInsert;
+export type PostSection = typeof postSections.$inferSelect;
+export type InsertPostSection = typeof postSections.$inferInsert;
