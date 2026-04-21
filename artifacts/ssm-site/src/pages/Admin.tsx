@@ -22,6 +22,39 @@ import { formatDate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import type { Inquiry, Project, Post, KnowledgeBaseEntry, GalleryImage, ProjectSection } from '@shared/schema';
 
+// ── Upload helper — XHR so we get progress events ─────────────────────────────
+
+function xhrUpload<T>(
+  url: string,
+  body: BodyInit,
+  headers: Record<string, string>,
+  onProgress: (pct: number) => void,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.withCredentials = true;
+    Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(JSON.parse(xhr.responseText) as T);
+      } else {
+        try {
+          const err = JSON.parse(xhr.responseText) as { error?: string };
+          reject(new Error(err.error ?? 'Upload failed'));
+        } catch {
+          reject(new Error('Upload failed'));
+        }
+      }
+    };
+    xhr.onerror = () => reject(new Error('Network error'));
+    xhr.send(body);
+  });
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 function LoginForm({ onSuccess }: { onSuccess: () => void }) {
@@ -667,41 +700,47 @@ function ProjectForm({
   const [tagsInput, setTagsInput] = useState((initial?.tags ?? []).join(', '));
   const [servicesInput, setServicesInput] = useState((initial?.services ?? []).join(', '));
   const [heroUploading, setHeroUploading] = useState(false);
+  const [heroProgress, setHeroProgress] = useState(0);
   const [heroUploadError, setHeroUploadError] = useState<string | null>(null);
   const heroFileRef = useRef<HTMLInputElement>(null);
   const [videoUploading, setVideoUploading] = useState(false);
+  const [videoProgress, setVideoProgress] = useState(0);
   const [videoUploadError, setVideoUploadError] = useState<string | null>(null);
   const videoFileRef = useRef<HTMLInputElement>(null);
+  const [testimonialTab, setTestimonialTab] = useState<'text' | 'image'>(
+    (initial as Partial<Project & { testimonialImageUrl?: string }>)?.testimonialImageUrl ? 'image' : 'text',
+  );
+  const [testimonialImgUploading, setTestimonialImgUploading] = useState(false);
+  const [testimonialImgProgress, setTestimonialImgProgress] = useState(0);
+  const [testimonialImgError, setTestimonialImgError] = useState<string | null>(null);
+  const testimonialImgRef = useRef<HTMLInputElement>(null);
 
   async function handleVideoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setVideoUploading(true);
+    setVideoProgress(0);
     setVideoUploadError(null);
     try {
-      // Read as base64 data URL and send as JSON — avoids multipart connection drops
       const data = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
         reader.onerror = () => reject(new Error('Could not read file'));
         reader.readAsDataURL(file);
       });
-      const response = await fetch('/api/admin/projects/upload-preview-video', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: file.name, data }),
-        credentials: 'include',
-      });
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({})) as { error?: string };
-        throw new Error(err.error ?? 'Upload failed');
-      }
-      const result = await response.json() as { url: string };
+      const body = JSON.stringify({ filename: file.name, data });
+      const result = await xhrUpload<{ url: string }>(
+        '/api/admin/projects/upload-preview-video',
+        body,
+        { 'Content-Type': 'application/json' },
+        (p) => setVideoProgress(p),
+      );
       setForm(prev => ({ ...prev, previewVideoUrl: result.url }));
     } catch (err) {
       setVideoUploadError(err instanceof Error ? err.message : 'Upload failed — try again');
     } finally {
       setVideoUploading(false);
+      setVideoProgress(0);
       if (videoFileRef.current) videoFileRef.current.value = '';
     }
   }
@@ -714,24 +753,45 @@ function ProjectForm({
     const file = e.target.files?.[0];
     if (!file) return;
     setHeroUploading(true);
+    setHeroProgress(0);
     setHeroUploadError(null);
     try {
       const formData = new FormData();
       formData.append('image', file);
-      const response = await fetch('/api/admin/gallery/upload', {
-        method: 'POST',
-        body: formData,
-        credentials: 'include',
-      });
-      if (!response.ok) throw new Error('Upload failed');
-      const img = await response.json() as { id: number };
+      const img = await xhrUpload<{ id: number }>(
+        '/api/admin/gallery/upload', formData, {}, (p) => setHeroProgress(p),
+      );
       const url = `/api/gallery/images/${img.id}`;
       setForm(prev => ({ ...prev, imageUrls: [...(prev.imageUrls ?? []), url] }));
     } catch {
       setHeroUploadError('Upload failed — try again');
     } finally {
       setHeroUploading(false);
+      setHeroProgress(0);
       if (heroFileRef.current) heroFileRef.current.value = '';
+    }
+  }
+
+  async function handleTestimonialImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setTestimonialImgUploading(true);
+    setTestimonialImgProgress(0);
+    setTestimonialImgError(null);
+    try {
+      const fd = new FormData();
+      fd.append('image', file);
+      const result = await xhrUpload<{ id: number }>(
+        '/api/admin/gallery/upload', fd, {}, (p) => setTestimonialImgProgress(p),
+      );
+      const url = `/api/gallery/images/${result.id}`;
+      setForm(prev => ({ ...prev, testimonialImageUrl: url } as typeof prev));
+    } catch (err) {
+      setTestimonialImgError(err instanceof Error ? err.message : 'Upload failed — try again');
+    } finally {
+      setTestimonialImgUploading(false);
+      setTestimonialImgProgress(0);
+      if (testimonialImgRef.current) testimonialImgRef.current.value = '';
     }
   }
 
@@ -828,8 +888,13 @@ function ProjectForm({
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-[var(--radius)] border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors cursor-pointer disabled:opacity-50"
           >
             <Upload size={11} />
-            {heroUploading ? 'Uploading…' : 'Upload hero image'}
+            {heroUploading ? `Uploading… ${heroProgress}%` : 'Upload hero image'}
           </button>
+          {heroUploading && heroProgress > 0 && (
+            <div className="mt-1.5 h-1 w-full max-w-[200px] rounded-full bg-muted overflow-hidden">
+              <div className="h-full bg-primary transition-all duration-200 rounded-full" style={{ width: `${heroProgress}%` }} />
+            </div>
+          )}
           {heroUploadError && <p className="text-xs text-destructive mt-1">{heroUploadError}</p>}
         </div>
         <div className="space-y-1.5 pt-1">
@@ -874,8 +939,13 @@ function ProjectForm({
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-[var(--radius)] border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors cursor-pointer disabled:opacity-50"
             >
               <Upload size={11} />
-              {videoUploading ? 'Uploading…' : 'Upload preview GIF'}
+              {videoUploading ? `Uploading… ${videoProgress}%` : 'Upload preview GIF'}
             </button>
+            {videoUploading && videoProgress > 0 && (
+              <div className="mt-1.5 h-1 w-full max-w-[200px] rounded-full bg-muted overflow-hidden">
+                <div className="h-full bg-primary transition-all duration-200 rounded-full" style={{ width: `${videoProgress}%` }} />
+              </div>
+            )}
             {videoUploadError && <p className="text-xs text-destructive mt-1">{videoUploadError}</p>}
           </div>
         )}
@@ -883,15 +953,82 @@ function ProjectForm({
 
       {/* Testimonial */}
       <div className="space-y-3 border border-border rounded-[var(--radius)] p-4">
-        <Label className="text-xs font-mono uppercase tracking-widest text-muted-foreground">Testimonial</Label>
-        <div className="space-y-1.5">
-          <Textarea
-            value={form.testimonial ?? ''}
-            onChange={e => handleChange('testimonial', e.target.value)}
-            rows={3}
-            placeholder="Quote from the client…"
-          />
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <Label className="text-xs font-mono uppercase tracking-widest text-muted-foreground">Testimonial</Label>
+          <div className="flex rounded-[var(--radius)] overflow-hidden border border-border text-xs">
+            <button
+              type="button"
+              onClick={() => setTestimonialTab('text')}
+              className={`px-3 py-1 transition-colors ${testimonialTab === 'text' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              Text
+            </button>
+            <button
+              type="button"
+              onClick={() => setTestimonialTab('image')}
+              className={`px-3 py-1 transition-colors ${testimonialTab === 'image' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              Screenshot
+            </button>
+          </div>
         </div>
+
+        {testimonialTab === 'text' ? (
+          <div className="space-y-1.5">
+            <Textarea
+              value={form.testimonial ?? ''}
+              onChange={e => handleChange('testimonial', e.target.value)}
+              rows={3}
+              placeholder="Quote from the client…"
+            />
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {(form as Partial<Project & { testimonialImageUrl?: string }>).testimonialImageUrl ? (
+              <div className="relative group w-full rounded-[var(--radius)] overflow-hidden border border-border">
+                <img
+                  src={(form as Partial<Project & { testimonialImageUrl?: string }>).testimonialImageUrl}
+                  alt="Testimonial screenshot"
+                  className="w-full object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() => setForm(prev => ({ ...prev, testimonialImageUrl: '' } as typeof prev))}
+                  className="absolute top-2 right-2 h-6 w-6 flex items-center justify-center rounded-full bg-background/80 text-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity border border-border"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">Upload a screenshot of a review or message from the client.</p>
+            )}
+            <div>
+              <input
+                ref={testimonialImgRef}
+                type="file"
+                accept="image/*"
+                onChange={handleTestimonialImageUpload}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => testimonialImgRef.current?.click()}
+                disabled={testimonialImgUploading}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-[var(--radius)] border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Upload size={11} />
+                {testimonialImgUploading ? `Uploading… ${testimonialImgProgress}%` : 'Upload screenshot'}
+              </button>
+              {testimonialImgUploading && testimonialImgProgress > 0 && (
+                <div className="mt-1.5 h-1 w-full max-w-[200px] rounded-full bg-muted overflow-hidden">
+                  <div className="h-full bg-primary transition-all duration-200 rounded-full" style={{ width: `${testimonialImgProgress}%` }} />
+                </div>
+              )}
+              {testimonialImgError && <p className="text-xs text-destructive mt-1">{testimonialImgError}</p>}
+            </div>
+          </div>
+        )}
+
         <div className="space-y-1.5">
           <Label>Attribution</Label>
           <Input

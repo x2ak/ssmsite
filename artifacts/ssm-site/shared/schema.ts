@@ -35,6 +35,7 @@ export const projects = pgTable('projects', {
   previewVideoUrl: text('preview_video_url'),
   testimonial: text('testimonial'),
   testimonialAuthor: text('testimonial_author'),
+  testimonialImageUrl: text('testimonial_image_url'),
   order: integer('order').default(0),
   createdAt: timestamp('created_at').defaultNow(),
 });

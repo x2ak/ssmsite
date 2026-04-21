@@ -3,15 +3,24 @@ import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { ArrowLeft, ExternalLink, ChevronLeft, ChevronRight, Quote } from 'lucide-react';
+import { ArrowLeft, ExternalLink, ChevronLeft, ChevronRight, Quote, ZoomIn } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { Badge } from '@/components/ui/badge';
 import { apiRequest } from '@/lib/queryClient';
+import Lightbox from '@/components/Lightbox';
 import type { Project, ProjectSection } from '@shared/schema';
 
 // ── Hero Carousel ──────────────────────────────────────────────────────────────
 
-function HeroCarousel({ images, title }: { images: string[]; title: string }) {
+function HeroCarousel({
+  images,
+  title,
+  onImageClick,
+}: {
+  images: string[];
+  title: string;
+  onImageClick: (i: number) => void;
+}) {
   const [current, setCurrent] = useState(0);
   const [paused, setPaused] = useState(false);
   const count = images.length;
@@ -29,8 +38,14 @@ function HeroCarousel({ images, title }: { images: string[]; title: string }) {
 
   if (count === 1) {
     return (
-      <div className="w-full aspect-video rounded-[var(--radius)] overflow-hidden mb-10 border border-border">
+      <div
+        className="group relative w-full aspect-video rounded-[var(--radius)] overflow-hidden mb-10 border border-border cursor-zoom-in"
+        onClick={() => onImageClick(0)}
+      >
         <img src={images[0]} alt={title} className="w-full h-full object-cover" />
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20">
+          <ZoomIn size={24} className="text-white drop-shadow-lg" />
+        </div>
       </div>
     );
   }
@@ -42,21 +57,29 @@ function HeroCarousel({ images, title }: { images: string[]; title: string }) {
       onMouseLeave={() => setPaused(false)}
     >
       <AnimatePresence mode="wait" initial={false}>
-        <motion.img
+        <motion.div
           key={current}
-          src={images[current]}
-          alt={`${title} — image ${current + 1}`}
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute inset-0 cursor-zoom-in"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.5, ease: 'easeInOut' }}
-        />
+          onClick={() => onImageClick(current)}
+        >
+          <img
+            src={images[current]}
+            alt={`${title} — image ${current + 1}`}
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20">
+            <ZoomIn size={24} className="text-white drop-shadow-lg" />
+          </div>
+        </motion.div>
       </AnimatePresence>
 
       <button
         type="button"
-        onClick={prev}
+        onClick={(e) => { e.stopPropagation(); prev(); }}
         aria-label="Previous image"
         className="absolute left-3 top-1/2 -translate-y-1/2 z-10 h-9 w-9 flex items-center justify-center rounded-full bg-background/70 text-foreground backdrop-blur-sm border border-border/60 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-background/90"
       >
@@ -64,7 +87,7 @@ function HeroCarousel({ images, title }: { images: string[]; title: string }) {
       </button>
       <button
         type="button"
-        onClick={next}
+        onClick={(e) => { e.stopPropagation(); next(); }}
         aria-label="Next image"
         className="absolute right-3 top-1/2 -translate-y-1/2 z-10 h-9 w-9 flex items-center justify-center rounded-full bg-background/70 text-foreground backdrop-blur-sm border border-border/60 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-background/90"
       >
@@ -76,7 +99,7 @@ function HeroCarousel({ images, title }: { images: string[]; title: string }) {
           <button
             key={i}
             type="button"
-            onClick={() => setCurrent(i)}
+            onClick={(e) => { e.stopPropagation(); setCurrent(i); }}
             aria-label={`Go to image ${i + 1}`}
             className={`rounded-full transition-all duration-300 ${
               i === current
@@ -92,7 +115,15 @@ function HeroCarousel({ images, title }: { images: string[]; title: string }) {
 
 // ── Section helpers ────────────────────────────────────────────────────────────
 
-function SectionPhotoGrid({ urls, title }: { urls: string[]; title: string }) {
+function SectionPhotoGrid({
+  urls,
+  title,
+  onImageClick,
+}: {
+  urls: string[];
+  title: string;
+  onImageClick: (i: number) => void;
+}) {
   if (urls.length === 0) return null;
   return (
     <div className={`grid gap-4 ${
@@ -101,11 +132,15 @@ function SectionPhotoGrid({ urls, title }: { urls: string[]; title: string }) {
       {urls.map((url, j) => (
         <div
           key={j}
-          className={`rounded-[var(--radius)] overflow-hidden border border-border ${
+          className={`group relative rounded-[var(--radius)] overflow-hidden border border-border cursor-zoom-in ${
             urls.length === 1 ? 'aspect-video' : 'aspect-[4/3]'
           }`}
+          onClick={() => onImageClick(j)}
         >
           <img src={url} alt={`${title} — photo ${j + 1}`} className="w-full h-full object-cover" loading="lazy" />
+          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20">
+            <ZoomIn size={20} className="text-white drop-shadow-lg" />
+          </div>
         </div>
       ))}
     </div>
@@ -120,7 +155,13 @@ function SectionBody({ body }: { body: string }) {
   );
 }
 
-function SectionContent({ section }: { section: ProjectSection }) {
+function SectionContent({
+  section,
+  onImageClick,
+}: {
+  section: ProjectSection;
+  onImageClick: (i: number) => void;
+}) {
   const urls = section.imageUrls ?? [];
   const hasPhotos = urls.length > 0;
   const hasBody = !!section.body;
@@ -129,7 +170,7 @@ function SectionContent({ section }: { section: ProjectSection }) {
   if (layout === 'photos-above') {
     return (
       <div className="space-y-6">
-        {hasPhotos && <SectionPhotoGrid urls={urls} title={section.title} />}
+        {hasPhotos && <SectionPhotoGrid urls={urls} title={section.title} onImageClick={onImageClick} />}
         {hasBody && <SectionBody body={section.body} />}
       </div>
     );
@@ -139,7 +180,7 @@ function SectionContent({ section }: { section: ProjectSection }) {
     return (
       <div className="flex flex-col md:flex-row gap-8">
         {hasBody && <div className="flex-1 min-w-0"><SectionBody body={section.body} /></div>}
-        {hasPhotos && <div className="flex-1 min-w-0"><SectionPhotoGrid urls={urls} title={section.title} /></div>}
+        {hasPhotos && <div className="flex-1 min-w-0"><SectionPhotoGrid urls={urls} title={section.title} onImageClick={onImageClick} /></div>}
       </div>
     );
   }
@@ -147,7 +188,7 @@ function SectionContent({ section }: { section: ProjectSection }) {
   return (
     <div className="space-y-6">
       {hasBody && <SectionBody body={section.body} />}
-      {hasPhotos && <SectionPhotoGrid urls={urls} title={section.title} />}
+      {hasPhotos && <SectionPhotoGrid urls={urls} title={section.title} onImageClick={onImageClick} />}
     </div>
   );
 }
@@ -157,6 +198,9 @@ function SectionContent({ section }: { section: ProjectSection }) {
 export default function ProjectDetail() {
   const [, params] = useRoute('/work/:slug');
   const slug = params?.slug ?? '';
+
+  // Lightbox state: null = closed, otherwise { images, index }
+  const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
 
   const { data: project, isLoading, error } = useQuery<Project>({
     queryKey: ['projects', slug],
@@ -271,8 +315,12 @@ export default function ProjectDetail() {
               </div>
             )}
 
-            {/* Hero carousel */}
-            <HeroCarousel images={heroImages} title={project.title} />
+            {/* Hero carousel — click to open lightbox */}
+            <HeroCarousel
+              images={heroImages}
+              title={project.title}
+              onImageClick={(i) => setLightbox({ images: heroImages, index: i })}
+            />
 
             {/* Short description */}
             <p className="text-lg text-muted-foreground leading-relaxed mb-10 border-l-2 border-primary pl-4">
@@ -304,14 +352,17 @@ export default function ProjectDetail() {
                       <div className="flex-1 h-px bg-border" />
                     </div>
                     <h2 className="font-syne font-bold text-2xl text-foreground mb-6">{section.title}</h2>
-                    <SectionContent section={section} />
+                    <SectionContent
+                      section={section}
+                      onImageClick={(j) => setLightbox({ images: section.imageUrls ?? [], index: j })}
+                    />
                   </motion.section>
                 ))}
               </div>
             )}
 
             {/* Testimonial */}
-            {project.testimonial && (
+            {(project.testimonial || (project as Project & { testimonialImageUrl?: string }).testimonialImageUrl) && (
               <motion.div
                 initial={{ opacity: 0, y: 12 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -319,14 +370,35 @@ export default function ProjectDetail() {
                 transition={{ duration: 0.5 }}
                 className="my-14 border-l-2 border-primary pl-6 py-2"
               >
-                <Quote size={18} className="text-primary/40 mb-3" />
-                <blockquote className="font-syne text-lg text-foreground leading-relaxed italic mb-4">
-                  {project.testimonial}
-                </blockquote>
-                {project.testimonialAuthor && (
-                  <p className="font-mono text-xs text-muted-foreground uppercase tracking-widest">
-                    — {project.testimonialAuthor}
-                  </p>
+                {(project as Project & { testimonialImageUrl?: string }).testimonialImageUrl ? (
+                  <>
+                    <img
+                      src={(project as Project & { testimonialImageUrl?: string }).testimonialImageUrl}
+                      alt="Client testimonial"
+                      className="w-full rounded-[var(--radius)] border border-border mb-4 cursor-zoom-in"
+                      onClick={() => setLightbox({
+                        images: [(project as Project & { testimonialImageUrl?: string }).testimonialImageUrl!],
+                        index: 0,
+                      })}
+                    />
+                    {project.testimonialAuthor && (
+                      <p className="font-mono text-xs text-muted-foreground uppercase tracking-widest">
+                        — {project.testimonialAuthor}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Quote size={18} className="text-primary/40 mb-3" />
+                    <blockquote className="font-syne text-lg text-foreground leading-relaxed italic mb-4">
+                      {project.testimonial}
+                    </blockquote>
+                    {project.testimonialAuthor && (
+                      <p className="font-mono text-xs text-muted-foreground uppercase tracking-widest">
+                        — {project.testimonialAuthor}
+                      </p>
+                    )}
+                  </>
                 )}
               </motion.div>
             )}
@@ -361,6 +433,17 @@ export default function ProjectDetail() {
           </motion.div>
         )}
       </div>
+
+      {/* Lightbox */}
+      {lightbox && (
+        <Lightbox
+          images={lightbox.images}
+          index={lightbox.index}
+          alt={project?.title}
+          onClose={() => setLightbox(null)}
+          onNav={(i) => setLightbox(lb => lb ? { ...lb, index: i } : null)}
+        />
+      )}
     </Layout>
   );
 }
