@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import {
   LogOut, Plus, Trash2, Edit2, Eye, EyeOff,
   ChevronDown, ChevronUp, CheckCircle, Copy, Link2, BookOpen, Briefcase,
-  Upload, ImageIcon, Reply, Send, Layers, X,
+  Upload, ImageIcon, Reply, Send, Layers, X, ArrowLeft,
 } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -81,7 +81,14 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-6">
+    <div className="relative min-h-screen flex items-center justify-center bg-background px-6">
+      <a
+        href="/"
+        className="absolute top-5 right-5 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors font-mono uppercase tracking-wider"
+      >
+        <ArrowLeft size={13} />
+        Home
+      </a>
       <motion.div
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
