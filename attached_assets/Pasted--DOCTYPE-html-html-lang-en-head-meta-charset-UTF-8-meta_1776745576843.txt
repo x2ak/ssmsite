@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vercel Security Incident — April 2026 | SSM-LTD</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Fira+Code:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: hsl(0 0% 4%);
+      --bg-card: hsl(0 0% 7%);
+      --bg-card-hover: hsl(0 0% 9%);
+      --cyan: hsl(180 100% 50%);
+      --cyan-dim: hsl(180 100% 50% / 0.12);
+      --cyan-border: hsl(180 100% 50% / 0.25);
+      --amber: hsl(38 100% 55%);
+      --amber-dim: hsl(38 100% 55% / 0.1);
+      --red: hsl(0 80% 55%);
+      --red-dim: hsl(0 80% 55% / 0.1);
+      --green: hsl(145 60% 45%);
+      --green-dim: hsl(145 60% 45% / 0.1);
+      --text: hsl(0 0% 90%);
+      --muted: hsl(0 0% 50%);
+      --border: hsl(0 0% 14%);
+      --font-mono: 'Fira Code', monospace;
+      --font-sans: 'Space Grotesk', sans-serif;
+    }
+
+```
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.7;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* noise grain overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.5;
+}
+
+.page-wrapper {
+  position: relative;
+  z-index: 1;
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 60px 24px 100px;
+}
+
+/* ── Header / Nav ── */
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 72px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.logo {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--cyan);
+  letter-spacing: 0.08em;
+  text-decoration: none;
+}
+
+.logo span { color: var(--muted); }
+
+.nav-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ── Section label ── */
+.section-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--cyan);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.section-label::after {
+  content: '';
+  display: block;
+  height: 1px;
+  width: 40px;
+  background: var(--cyan-border);
+}
+
+/* ── Alert banner ── */
+.alert-banner {
+  background: var(--amber-dim);
+  border: 1px solid hsl(38 100% 55% / 0.3);
+  border-radius: 4px;
+  padding: 14px 18px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--amber);
+  letter-spacing: 0.05em;
+  margin-bottom: 48px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  animation: fadeDown 0.5s ease both;
+}
+
+.alert-icon { flex-shrink: 0; margin-top: 1px; }
+
+/* ── Article header ── */
+.article-meta {
+  margin-bottom: 48px;
+  animation: fadeDown 0.5s 0.1s ease both;
+}
+
+.article-date {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.article-date .dot {
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: var(--cyan);
+  display: inline-block;
+}
+
+h1 {
+  font-size: clamp(26px, 5vw, 38px);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  margin-bottom: 20px;
+}
+
+h1 em {
+  font-style: normal;
+  color: var(--cyan);
+}
+
+.article-summary {
+  font-size: 17px;
+  color: hsl(0 0% 65%);
+  line-height: 1.65;
+  border-left: 2px solid var(--cyan-border);
+  padding-left: 18px;
+  font-weight: 300;
+}
+
+/* ── Tags ── */
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 2px;
+  border: 1px solid;
+}
+
+.tag-red    { color: var(--red);   border-color: hsl(0 80% 55% / 0.3);   background: var(--red-dim); }
+.tag-amber  { color: var(--amber); border-color: hsl(38 100% 55% / 0.3); background: var(--amber-dim); }
+.tag-cyan   { color: var(--cyan);  border-color: var(--cyan-border);      background: var(--cyan-dim); }
+.tag-green  { color: var(--green); border-color: hsl(145 60% 45% / 0.3); background: var(--green-dim); }
+
+/* ── Divider ── */
+.divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 48px 0;
+}
+
+/* ── Body copy ── */
+.prose {
+  animation: fadeUp 0.6s 0.2s ease both;
+}
+
+.prose h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 44px 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.prose h2 .h2-num {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--cyan);
+  background: var(--cyan-dim);
+  border: 1px solid var(--cyan-border);
+  border-radius: 2px;
+  padding: 2px 7px;
+  flex-shrink: 0;
+}
+
+.prose p {
+  color: hsl(0 0% 72%);
+  font-size: 15.5px;
+  margin-bottom: 20px;
+}
+
+.prose strong { color: var(--text); font-weight: 600; }
+
+/* ── Incident card ── */
+.incident-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--red);
+  border-radius: 4px;
+  padding: 20px 22px;
+  margin: 28px 0;
+}
+
+.incident-card .card-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--red);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.incident-card p {
+  font-size: 14.5px;
+  color: hsl(0 0% 68%);
+  margin-bottom: 0;
+}
+
+/* ── Timeline ── */
+.timeline {
+  position: relative;
+  margin: 28px 0;
+  padding-left: 24px;
+}
+
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 1px;
+  background: linear-gradient(to bottom, var(--cyan), var(--green), transparent);
+}
+
+.timeline-item {
+  position: relative;
+  margin-bottom: 24px;
+  padding-left: 16px;
+}
+
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -28px;
+  top: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cyan);
+  border: 1px solid var(--bg);
+  box-shadow: 0 0 8px var(--cyan);
+}
+
+.timeline-item.done::before { background: var(--green); box-shadow: 0 0 8px var(--green); }
+
+.timeline-time {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--cyan);
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+.timeline-item.done .timeline-time { color: var(--green); }
+
+.timeline-text {
+  font-size: 14.5px;
+  color: hsl(0 0% 70%);
+  line-height: 1.5;
+}
+
+/* ── Action checklist ── */
+.checklist {
+  margin: 24px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.check-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 12px 16px;
+  font-size: 14px;
+  color: hsl(0 0% 70%);
+}
+
+.check-item .check-icon {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--green);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ── Reassurance box ── */
+.reassurance-box {
+  background: var(--green-dim);
+  border: 1px solid hsl(145 60% 45% / 0.3);
+  border-radius: 4px;
+  padding: 22px 24px;
+  margin: 36px 0;
+}
+
+.reassurance-box .box-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--green);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.reassurance-box p {
+  font-size: 15px;
+  color: hsl(0 0% 75%);
+  margin-bottom: 0;
+}
+
+/* ── Quote / callout ── */
+.callout {
+  border-left: 2px solid var(--cyan);
+  padding: 16px 20px;
+  margin: 28px 0;
+  background: var(--cyan-dim);
+  border-radius: 0 4px 4px 0;
+}
+
+.callout p {
+  font-size: 15px;
+  color: hsl(0 0% 78%);
+  font-style: italic;
+  margin: 0;
+}
+
+/* ── CTA ── */
+.cta-block {
+  margin-top: 56px;
+  padding: 32px;
+  background: var(--bg-card);
+  border: 1px solid var(--cyan-border);
+  border-radius: 6px;
+  text-align: center;
+}
+
+.cta-block .cta-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--cyan);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.cta-block h3 {
+  font-size: 22px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.cta-block p {
+  font-size: 14.5px;
+  color: hsl(0 0% 60%);
+  max-width: 500px;
+  margin: 0 auto 24px;
+}
+
+.cta-btn {
+  display: inline-block;
+  background: var(--cyan);
+  color: hsl(0 0% 4%);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 12px 28px;
+  border-radius: 3px;
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+
+.cta-btn:hover { opacity: 0.85; }
+
+/* ── Footer ── */
+.article-footer {
+  margin-top: 56px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: gap;
+  gap: 16px;
+}
+
+.author-block { display: flex; align-items: center; gap: 14px; }
+
+.author-avatar {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--cyan-dim);
+  border: 1px solid var(--cyan-border);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--cyan);
+}
+
+.author-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.author-role {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.footer-link {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--cyan);
+  text-decoration: none;
+  letter-spacing: 0.05em;
+}
+
+/* ── Animations ── */
+@keyframes fadeDown {
+  from { opacity: 0; transform: translateY(-12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Responsive ── */
+@media (max-width: 560px) {
+  .site-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+  h1 { font-size: 24px; }
+  .article-footer { flex-direction: column; align-items: flex-start; }
+}
+```
+
+  </style>
+</head>
+<body>
+  <div class="page-wrapper">
+
+```
+<!-- Header -->
+<header class="site-header">
+  <a href="/" class="logo">SSM<span>-LTD</span></a>
+  <span class="nav-label">// Security Intelligence</span>
+</header>
+
+<!-- Alert banner -->
+<div class="alert-banner">
+  <svg class="alert-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+  <span>INCIDENT NOTICE &nbsp;·&nbsp; Vercel April 2026 Security Incident &nbsp;·&nbsp; SSM client environments confirmed unaffected</span>
+</div>
+
+<!-- Article meta -->
+<div class="article-meta">
+  <div class="section-label">// 01 &nbsp; Security Intelligence</div>
+  <div class="article-date">
+    <span class="dot"></span>
+    <span>21 April 2026</span>
+    <span style="color:var(--border)">|</span>
+    <span>Incident Response &amp; Disclosure</span>
+  </div>
+  <h1>Vercel Breach — <em>How SSM Responded Before the Dust Settled</em></h1>
+  <p class="article-summary">
+    A sophisticated supply-chain attack compromised a third-party AI tool used by a Vercel employee, exposing non-sensitive environment variables across a subset of Vercel customers. Here is exactly how we identified the threat early, audited every client system, and ensured nothing was left to chance.
+  </p>
+  <div class="tag-row">
+    <span class="tag tag-red">Incident Report</span>
+    <span class="tag tag-amber">Supply-Chain Attack</span>
+    <span class="tag tag-cyan">Vercel · April 2026</span>
+    <span class="tag tag-green">Clients Unaffected</span>
+  </div>
+</div>
+
+<hr class="divider" />
+
+<!-- Body -->
+<div class="prose">
+
+  <!-- What happened -->
+  <h2><span class="h2-num">01</span> What Happened</h2>
+
+  <div class="incident-card">
+    <div class="card-label">⚠ Incident Origin</div>
+    <p>
+      The breach originated from <strong>Context.ai</strong>, a third-party AI tool in use by a Vercel employee. The attacker leveraged compromised OAuth credentials from that tool to gain access to the employee's Google Workspace account — and from there, to Vercel's internal environment variable store. Only environment variables <strong>not</strong> marked as 'sensitive' were accessible. No npm packages published by Vercel were tampered with, and Vercel's core infrastructure remained operational.
+    </p>
+  </div>
+
+  <p>
+    This was not a brute-force or opportunistic attack. Vercel's own security team described the attacker as <strong>highly sophisticated</strong>, citing their operational velocity and precise understanding of Vercel's internal architecture. This type of third-party OAuth pivot is an increasingly common vector — and exactly the sort of threat we monitor for on behalf of our clients.
+  </p>
+
+  <!-- How we found out -->
+  <h2><span class="h2-num">02</span> How We Found Out — Before Vercel Confirmed It</h2>
+
+  <p>
+    SSM actively participates in breach intelligence forums and closed security communities. That is not incidental — it is a deliberate part of our threat posture. When credible indicators of this incident surfaced on monitoring channels, our team was already aware of the situation <strong>hours before Vercel's public confirmation</strong>.
+  </p>
+
+  <div class="callout">
+    <p>'Being in the know before the vendor confirms anything is not luck — it is the product of deliberate, ongoing intelligence work. That window of time is everything in incident response.'</p>
+  </div>
+
+  <p>
+    Early awareness gave us the one thing that matters most in security: <strong>time</strong>. Time to audit. Time to act. Time to protect — rather than react.
+  </p>
+
+  <!-- Timeline -->
+  <h2><span class="h2-num">03</span> Our Response — Step by Step</h2>
+
+  <p>The moment credible intelligence was confirmed, we initiated a structured incident response process across all SSM-managed client environments.</p>
+
+  <div class="timeline">
+    <div class="timeline-item done">
+      <div class="timeline-time">// STAGE 01 — Intelligence Identification</div>
+      <div class="timeline-text">Breach indicators identified via security forums, hours before Vercel's public bulletin was issued. Internal alert raised immediately.</div>
+    </div>
+    <div class="timeline-item done">
+      <div class="timeline-time">// STAGE 02 — Log Audit Initiated</div>
+      <div class="timeline-text">Full audit log review begun across all Vercel-hosted client environments. Used <code style="font-family:var(--font-mono);font-size:12px;color:var(--cyan);background:var(--cyan-dim);padding:1px 5px;border-radius:2px;">vercel activity</code> CLI to programmatically inspect deployment and access logs for anomalous behaviour.</div>
+    </div>
+    <div class="timeline-item done">
+      <div class="timeline-time">// STAGE 03 — Environment Variable Review</div>
+      <div class="timeline-text">All non-sensitive environment variables across client projects reviewed and cross-referenced. Credentials assessed for exposure risk in line with the known IOC scope.</div>
+    </div>
+    <div class="timeline-item done">
+      <div class="timeline-time">// STAGE 04 — Google Workspace Verification</div>
+      <div class="timeline-text">Google Workspace Admin consoles audited for the malicious OAuth app (IOC: <code style="font-family:var(--font-mono);font-size:11px;color:var(--amber);background:var(--amber-dim);padding:1px 5px;border-radius:2px;">v79i7bbvqj.apps.googleusercontent.com</code>). No unauthorised access detected.</div>
+    </div>
+    <div class="timeline-item done">
+      <div class="timeline-time">// STAGE 05 — Secrets Migrated to Sensitive</div>
+      <div class="timeline-text">All environment variables across managed projects migrated to Vercel's 'sensitive' storage — encrypted at rest and inaccessible to read-back. Dynamic, short-lived credentials implemented where applicable.</div>
+    </div>
+    <div class="timeline-item done">
+      <div class="timeline-time">// STAGE 06 — Clean Bill of Health Confirmed</div>
+      <div class="timeline-text">No client systems, deployments, or data were found to be within the breach's blast radius. All environments confirmed clean.</div>
+    </div>
+  </div>
+
+  <!-- Actions taken -->
+  <h2><span class="h2-num">04</span> What We Did — In Full</h2>
+
+  <div class="checklist">
+    <div class="check-item"><span class="check-icon">[✓]</span><span>Rotated all non-sensitive tokens, API keys, and database credentials across managed Vercel environments</span></div>
+    <div class="check-item"><span class="check-icon">[✓]</span><span>Manually inspected all deployment and activity logs via CLI for signs of unauthorised access or data exfiltration</span></div>
+    <div class="check-item"><span class="check-icon">[✓]</span><span>Audited Google Workspace admin panels for the identified malicious OAuth application and revoked access where applicable</span></div>
+    <div class="check-item"><span class="check-icon">[✓]</span><span>Migrated all environment variables to Vercel's Sensitive Variable storage — values are now encrypted and protected from read-back</span></div>
+    <div class="check-item"><span class="check-icon">[✓]</span><span>Enabled and verified MFA across all relevant accounts and team members with Vercel access</span></div>
+    <div class="check-item"><span class="check-icon">[✓]</span><span>Reviewed all recent deployments for unexpected or suspicious activity</span></div>
+    <div class="check-item"><span class="check-icon">[✓]</span><span>Confirmed deployment protection is set to Standard as a minimum across all projects</span></div>
+  </div>
+
+  <!-- Wider context -->
+  <h2><span class="h2-num">05</span> Why This Matters Beyond Vercel</h2>
+
+  <p>
+    This incident is a textbook illustration of a <strong>supply-chain attack via third-party OAuth</strong>. The initial compromise was not of Vercel itself — it was of a small AI tool that had been granted access to a Vercel employee's Google Workspace. One trusted integration became the pivot point for a far wider intrusion.
+  </p>
+
+  <p>
+    This is the new terrain. Attackers do not always target the fortress directly — they target the lesser-fortified supplier, partner, or tool that has been granted the keys. <strong>The attack surface is no longer just your infrastructure — it is every OAuth app, API integration, and SaaS tool across your ecosystem.</strong>
+  </p>
+
+  <div class="incident-card" style="border-left-color: var(--amber);">
+    <div class="card-label" style="color:var(--amber);">// Context</div>
+    <p>
+      The compromised OAuth app potentially affected <strong>hundreds of organisations</strong> beyond Vercel. Any Google Workspace connected to the Context.ai integration may have been within scope. This was not a targeted attack on one company — it was a precision sweep across a wide blast radius.
+    </p>
+  </div>
+
+  <!-- Reassurance -->
+  <div class="reassurance-box">
+    <div class="box-label">// Status: All Clear</div>
+    <p>
+      Following a full audit of all SSM-managed client environments, <strong>no client data, credentials, or deployments were compromised</strong>. Our early intelligence access meant we were auditing and mitigating before most organisations were even aware an incident had occurred. Your infrastructure was protected.
+    </p>
+  </div>
+
+  <!-- What this tells you -->
+  <h2><span class="h2-num">06</span> What This Tells You About SSM</h2>
+
+  <p>
+    Responding to a breach after it hits the news is table stakes. What we offer is <strong>the layer before that</strong> — intelligence-led awareness, continuous monitoring, and the operational readiness to act the moment a credible threat emerges.
+  </p>
+
+  <p>
+    Our forum participation is not passive. It is an active intelligence operation — scanning breach disclosures, cross-referencing IOCs against client environments, and building the kind of contextual awareness that turns a potential crisis into a contained, documented non-event.
+  </p>
+
+  <p>
+    We do not wait to be told there is a fire. We are watching for smoke.
+  </p>
+
+  <!-- CTA -->
+  <div class="cta-block">
+    <div class="cta-label">// Your Vision, Safely Implemented</div>
+    <h3>Security you can rely on.</h3>
+    <p>If you want to discuss how SSM can extend this level of proactive defence to your infrastructure, get in touch. No jargon. No upsell. Just expertise.</p>
+    <a href="mailto:info@ssmltd.co.uk" class="cta-btn">Contact SSM-LTD</a>
+  </div>
+
+</div>
+
+<!-- Article footer -->
+<div class="article-footer">
+  <div class="author-block">
+    <div class="author-avatar">Z</div>
+    <div>
+      <div class="author-name">SSM-LTD Security Team</div>
+      <div class="author-role">// Secure Solutions Midlands</div>
+    </div>
+  </div>
+  <a href="https://vercel.com/kb/bulletin/vercel-april-2026-security-incident" class="footer-link" target="_blank" rel="noopener">
+    Vercel Official Bulletin →
+  </a>
+</div>
+```
+
+  </div>
+</body>
+</html>
