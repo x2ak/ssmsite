@@ -182,7 +182,8 @@ const SECTIONS: Section[] = [
               {[
                 { name: 'Resend', purpose: 'Transactional email delivery', location: 'USA (SCCs)' },
                 { name: 'Anthropic', purpose: 'AI chat response generation', location: 'USA (SCCs)' },
-                { name: 'Replit', purpose: 'Application hosting & infrastructure', location: 'USA (SCCs)' },
+                { name: 'Vercel', purpose: 'Frontend hosting & edge delivery', location: 'USA / EU (SCCs)' },
+                { name: 'Railway', purpose: 'Backend infrastructure & database hosting', location: 'USA (SCCs)' },
               ].map(({ name, purpose, location }) => (
                 <tr key={name}>
                   <td className="px-4 py-3 font-medium">{name}</td>
