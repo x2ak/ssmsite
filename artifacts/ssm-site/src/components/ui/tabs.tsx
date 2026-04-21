@@ -46,6 +46,8 @@ export function TabsList({ className, ...props }: HTMLAttributes<HTMLDivElement>
     <div
       className={cn(
         'flex items-center gap-1 border-b border-border mb-6',
+        'overflow-x-auto flex-nowrap',
+        '[&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]',
         className
       )}
       {...props}
@@ -66,7 +68,7 @@ export function TabsTrigger({
   return (
     <button
       className={cn(
-        'relative px-4 py-2.5 text-sm font-medium transition-colors duration-150 cursor-pointer',
+        'relative shrink-0 px-4 py-2.5 text-sm font-medium transition-colors duration-150 cursor-pointer',
         'focus-visible:outline-none',
         isActive
           ? 'text-foreground after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary'
