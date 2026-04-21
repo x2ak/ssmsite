@@ -31,7 +31,7 @@ export default function Work() {
             Our Work
           </h1>
           <p className="mt-4 text-lg text-muted-foreground max-w-2xl">
-            A selection of projects across web development, cybersecurity, and surveillance — each built to last and secured by design.
+            A selection of projects across web development and cybersecurity — each built to last and secured by design.
           </p>
         </motion.div>
 

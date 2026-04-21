@@ -61,7 +61,7 @@ export default function About() {
                 Secure Solutions Midlands was founded on a straightforward premise: businesses deserve digital infrastructure that is both well-built and genuinely secure. Too often, they get one or the other.
               </p>
               <p>
-                We are a specialist firm based in the Midlands, UK. Our work spans web development, cybersecurity, and physical surveillance — three disciplines that, in practice, are deeply interconnected. A well-built website means nothing if the infrastructure behind it is exposed. A surveillance system is only as good as the network it runs on.
+                We are a specialist firm based in the Midlands, UK. Our work spans web development and cybersecurity — two disciplines that, in practice, are deeply interconnected. A well-built website means nothing if the infrastructure behind it is exposed.
               </p>
               <p>
                 We work with businesses of all sizes: from growing SMEs who need their first proper web presence, to established organisations that need a rigorous security audit before a critical deadline. What connects all our clients is that they take their digital infrastructure seriously.

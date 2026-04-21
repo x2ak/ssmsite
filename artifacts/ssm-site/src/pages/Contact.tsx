@@ -194,7 +194,6 @@ export default function Contact() {
                     </option>
                     <option value="Web Development">Web Development</option>
                     <option value="Cybersecurity">Network Security &amp; Cyber Defence</option>
-                    <option value="Surveillance">Surveillance Systems</option>
                     <option value="Other">Other / Not sure yet</option>
                   </Select>
                   {errors.service && (

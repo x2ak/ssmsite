@@ -61,20 +61,6 @@ async function seed() {
         featured: true,
         order: 2,
       },
-      {
-        title: 'Multi-Site CCTV Integration',
-        slug: 'multi-site-cctv-integration',
-        client: 'Warehouse & Logistics Co.',
-        description:
-          'Design and installation of a unified CCTV and remote monitoring system across four warehouse sites, integrated with existing network infrastructure.',
-        longDescription:
-          'A logistics company with four sites across the Midlands needed a unified surveillance solution they could manage remotely. We designed and installed a full IP-based CCTV system with central monitoring, motion analytics, and integration with their existing access control systems. All footage is encrypted in transit and at rest.',
-        tags: ['Surveillance', 'CCTV', 'Integration'],
-        imageUrl: null,
-        liveUrl: null,
-        featured: false,
-        order: 3,
-      },
     ]);
     console.log('✓ Portfolio projects seeded');
   } else {

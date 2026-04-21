@@ -27,7 +27,7 @@ export function Footer() {
               Your Vision, Safely Implemented.
             </p>
             <p className="mt-2 text-sm text-muted-foreground">
-              Cybersecurity · Web Development · Surveillance
+              Cybersecurity · Web Development
             </p>
           </div>
 

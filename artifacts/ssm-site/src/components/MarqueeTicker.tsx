@@ -1,7 +1,6 @@
 const ITEMS = [
   'Web Development',
   'Cybersecurity',
-  'CCTV & Surveillance',
   'Penetration Testing',
   'Secure by Design',
   'Network Security',

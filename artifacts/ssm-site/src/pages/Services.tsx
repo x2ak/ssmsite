@@ -35,22 +35,6 @@ const SERVICES = [
     ],
     href: '/contact',
   },
-  {
-    number: '03',
-    title: 'Surveillance Systems',
-    description:
-      'IP-based CCTV installation and remote monitoring systems designed for businesses that need reliable, integrated security infrastructure — not off-the-shelf kits.',
-    specifics: [
-      'IP CCTV system design and installation',
-      'Multi-site unified monitoring solutions',
-      'Remote access and mobile monitoring setup',
-      'Integration with access control systems',
-      'Motion analytics and smart alerting',
-      'Encrypted storage and secure data handling',
-      'Maintenance, support, and system upgrades',
-    ],
-    href: '/contact',
-  },
 ];
 
 export default function Services() {
@@ -73,7 +57,7 @@ export default function Services() {
             Services
           </h1>
           <p className="mt-4 text-lg text-muted-foreground max-w-2xl">
-            Three areas of deep expertise. Each one carried out properly, with no shortcuts.
+            Two areas of deep expertise. Each one carried out properly, with no shortcuts.
           </p>
         </motion.div>
       </section>
