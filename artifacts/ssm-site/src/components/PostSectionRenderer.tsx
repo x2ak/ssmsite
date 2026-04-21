@@ -120,6 +120,22 @@ function CardSection({ section }: { section: PostSection }) {
   );
 }
 
+function InlineMarkdown({ children }: { children: string }) {
+  return (
+    <ReactMarkdown
+      components={{
+        p: ({ children: c }) => <span>{c}</span>,
+        strong: ({ children: c }) => <strong className="font-semibold text-foreground">{c}</strong>,
+        em: ({ children: c }) => <em>{c}</em>,
+        code: ({ children: c }) => <code className="font-mono text-[0.8em] bg-muted px-1 rounded">{c}</code>,
+        a: ({ href, children: c }) => <a href={href} className="text-primary underline underline-offset-2">{c}</a>,
+      }}
+    >
+      {children}
+    </ReactMarkdown>
+  );
+}
+
 function TimelineSection({ section }: { section: PostSection }) {
   const items = parseItems(section.items);
   return (
@@ -138,7 +154,9 @@ function TimelineSection({ section }: { section: PostSection }) {
                 <p className="font-mono text-[10px] uppercase tracking-widest text-primary mb-1">
                   Stage {String(i + 1).padStart(2, '0')}
                 </p>
-                <p className="text-sm text-muted-foreground leading-relaxed">{item}</p>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  <InlineMarkdown>{item}</InlineMarkdown>
+                </p>
               </div>
             </div>
           ))}
@@ -163,7 +181,9 @@ function ChecklistSection({ section }: { section: PostSection }) {
               className="flex items-start gap-3 bg-card border border-border rounded-[var(--radius)] px-4 py-3"
             >
               <span className="font-mono text-xs text-primary mt-px shrink-0">[✓]</span>
-              <span className="text-sm text-foreground leading-relaxed">{item}</span>
+              <span className="text-sm text-foreground leading-relaxed">
+                <InlineMarkdown>{item}</InlineMarkdown>
+              </span>
             </div>
           ))}
         </div>
