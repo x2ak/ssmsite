@@ -41,7 +41,7 @@ export function Navbar() {
         className={cn(
           'fixed top-0 left-0 right-0 z-40 transition-all duration-500',
           scrolled
-            ? 'backdrop-blur-md backdrop-saturate-150 bg-background/75 border-b border-border/50 shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.04),0_4px_24px_-4px_hsl(0_0%_0%/0.08)]'
+            ? 'backdrop-blur-md backdrop-saturate-[180%] bg-background/75 shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.06),0_4px_24px_-4px_hsl(0_0%_0%/0.1)]'
             : 'bg-transparent'
         )}
       >

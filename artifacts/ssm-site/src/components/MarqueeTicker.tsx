@@ -28,7 +28,7 @@ function TickerList() {
 
 export function MarqueeTicker() {
   return (
-    <div className="w-full overflow-hidden border-y border-border/60 py-3 bg-background/40">
+    <div className="w-full overflow-hidden py-3 bg-background/40">
       <div className="flex items-center gap-10 marquee-track">
         <TickerList />
         <TickerList />

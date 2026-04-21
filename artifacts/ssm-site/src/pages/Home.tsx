@@ -5,6 +5,7 @@ import { Menu, X } from 'lucide-react';
 import { ChatInterface } from '@/components/ChatInterface';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { NetworkBackground } from '@/components/NetworkBackground';
+import { MarqueeTicker } from '@/components/MarqueeTicker';
 
 const HEADING = "Tell me what you're building.";
 
@@ -128,7 +129,7 @@ export default function Home() {
       </AnimatePresence>
 
       {/* Main content — fills remaining viewport, compresses when keyboard opens */}
-      <main className="flex-1 flex flex-col items-center overflow-hidden px-6 pt-[64px] pb-4 relative z-10">
+      <main className="flex-1 flex flex-col items-center overflow-hidden px-6 pt-[64px] pb-2 relative z-10">
         <div className="w-full max-w-[680px] flex flex-col flex-1 min-h-0">
 
           {/* Brand label + hero heading — shrink-0 so they don't squash */}
@@ -191,6 +192,11 @@ export default function Home() {
           </motion.p>
         </div>
       </main>
+
+      {/* Marquee ticker strip — anchored at the very bottom of the home viewport */}
+      <div className="shrink-0 relative z-10">
+        <MarqueeTicker />
+      </div>
     </div>
   );
 }
