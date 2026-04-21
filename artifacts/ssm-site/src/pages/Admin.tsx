@@ -153,6 +153,7 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
   const [error, setError] = useState('');
   const [shaking, setShaking] = useState(false);
   const [loading, setLoading] = useState(false);
+  const toast = useToast();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -162,9 +163,17 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
       await apiRequest('POST', '/api/auth/login', { username, password });
       onSuccess();
     } catch (err) {
-      setError((err as Error).message || 'Invalid credentials');
+      const message = (err as Error).message || 'Invalid credentials';
+      const msg = message.toLowerCase();
+      const isNetwork = msg.includes('network') || msg.includes('fetch') || msg.includes('unavailable') || msg.includes('server');
+      setError(message);
       setShaking(true);
       setTimeout(() => setShaking(false), 500);
+      if (isNetwork) {
+        toast('error', 'Network error', 'Could not reach the server — please try again.');
+      } else {
+        toast('error', 'Sign-in failed', 'Invalid username or password.');
+      }
     } finally {
       setLoading(false);
     }
@@ -3059,7 +3068,11 @@ export default function Admin() {
   }
 
   if (!authenticated) {
-    return <LoginForm onSuccess={() => setAuthenticated(true)} />;
+    return (
+      <ToastProvider>
+        <LoginForm onSuccess={() => setAuthenticated(true)} />
+      </ToastProvider>
+    );
   }
 
   return (
