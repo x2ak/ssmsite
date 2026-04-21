@@ -39,7 +39,7 @@ import { insertInquirySchema } from '../shared/schema';
 import bcrypt from 'bcryptjs';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
-const videoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
+const gifUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 export function registerRoutes(app: Express) {
 
@@ -211,10 +211,9 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  // Upload a preview video for a project thumbnail (100 MB limit)
+  // Upload a preview GIF for a project thumbnail (10 MB limit)
   // Registered BEFORE /:id routes to avoid Express matching "upload-preview-video" as an id param.
   app.post('/api/admin/projects/upload-preview-video', requireAdmin, async (req, res) => {
-    // Track whether we've already sent a response (abort can fire after success)
     let responded = false;
     const reply = (status: number, body: object) => {
       if (responded) return;
@@ -222,9 +221,8 @@ export function registerRoutes(app: Express) {
       res.status(status).json(body);
     };
 
-    // If the client disconnects mid-upload, send a clean error
     req.on('aborted', () => {
-      reply(499, { error: 'Upload cancelled — the connection was closed before the file arrived. Try a smaller file or a faster connection.' });
+      reply(499, { error: 'Upload cancelled — the connection was closed before the file arrived.' });
     });
     req.on('close', () => {
       if (!res.writableEnded) {
@@ -235,34 +233,31 @@ export function registerRoutes(app: Express) {
     try {
       await new Promise<void>((resolve, reject) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        videoUpload.single('video')(req as any, res as any, (err: unknown) => {
+        gifUpload.single('video')(req as any, res as any, (err: unknown) => {
           if (err) reject(err);
           else resolve();
         });
       });
       const file = req.file;
-      if (!file) { reply(400, { error: 'No file received — make sure the field name is "video".' }); return; }
-      const allowed = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/x-msvideo'];
-      if (!allowed.includes(file.mimetype)) {
-        reply(400, { error: `File type "${file.mimetype}" is not allowed — use mp4, webm, mov, ogg, or avi` }); return;
+      if (!file) { reply(400, { error: 'No file received.' }); return; }
+      if (file.mimetype !== 'image/gif') {
+        reply(400, { error: `Only GIF files are accepted (received "${file.mimetype}").` }); return;
       }
       const objectName = await uploadToGCS(file.buffer, file.originalname, file.mimetype);
       const record = await createGalleryImage({
         filename: file.originalname,
         objectName,
         contentType: file.mimetype,
-        label: 'preview-video',
+        label: 'preview-gif',
       });
       reply(201, { id: record.id, url: `/api/gallery/images/${record.id}` });
     } catch (err: unknown) {
       const multerErr = err as { code?: string; message?: string };
       if (multerErr?.code === 'LIMIT_FILE_SIZE') {
-        reply(413, { error: 'Video is too large — maximum is 100 MB' });
-      } else if ((multerErr?.message || '').includes('aborted') || (multerErr?.message || '').includes('ECONNRESET')) {
-        reply(499, { error: 'Upload cancelled — the connection dropped mid-transfer. Try a shorter clip.' });
+        reply(413, { error: 'GIF is too large — maximum is 10 MB.' });
       } else {
-        console.error('Error uploading preview video:', err);
-        reply(500, { error: multerErr?.message || 'Video upload failed — please try again' });
+        console.error('Error uploading preview GIF:', err);
+        reply(500, { error: multerErr?.message || 'GIF upload failed — please try again.' });
       }
     }
   });

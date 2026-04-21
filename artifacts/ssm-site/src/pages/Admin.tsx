@@ -831,20 +831,17 @@ function ProjectForm({
           <Input value={form.imageUrl ?? ''} onChange={e => handleChange('imageUrl', e.target.value)} placeholder="https://…" />
         </div>
       </div>
-      {/* Preview video */}
+      {/* Preview GIF */}
       <div className="space-y-2 border border-border rounded-[var(--radius)] p-4">
-        <Label className="text-xs font-mono uppercase tracking-widest text-muted-foreground">Preview Video (card thumbnail)</Label>
+        <Label className="text-xs font-mono uppercase tracking-widest text-muted-foreground">Preview GIF (card thumbnail)</Label>
         <p className="text-xs text-muted-foreground">
-          Replaces the still image on portfolio cards. Short looping clip recommended (mp4, webm, mov · max 100 MB).
+          Replaces the still image on portfolio cards with an animated GIF. Max 10 MB.
         </p>
         {form.previewVideoUrl ? (
           <div className="relative">
-            <video
+            <img
               src={form.previewVideoUrl}
-              autoPlay
-              muted
-              loop
-              playsInline
+              alt="Preview GIF"
               className="w-full max-h-40 rounded-[var(--radius)] border border-border object-cover bg-muted"
             />
             <button
@@ -860,7 +857,7 @@ function ProjectForm({
             <input
               ref={videoFileRef}
               type="file"
-              accept="video/mp4,video/webm,video/ogg,video/quicktime,video/x-msvideo"
+              accept="image/gif"
               onChange={handleVideoUpload}
               className="hidden"
             />
@@ -871,7 +868,7 @@ function ProjectForm({
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-[var(--radius)] border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors cursor-pointer disabled:opacity-50"
             >
               <Upload size={11} />
-              {videoUploading ? 'Uploading…' : 'Upload preview video'}
+              {videoUploading ? 'Uploading…' : 'Upload preview GIF'}
             </button>
             {videoUploadError && <p className="text-xs text-destructive mt-1">{videoUploadError}</p>}
           </div>
