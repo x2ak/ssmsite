@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import {
-  LogOut, Plus, Trash2, Edit2, Eye, EyeOff,
+  LogOut, Plus, Trash2, Edit2, Eye, EyeOff, Check,
   ChevronDown, ChevronUp, CheckCircle, Copy, Link2, BookOpen, Briefcase,
   Upload, ImageIcon, Reply, Send, Layers, X, ArrowLeft, AlertCircle, Info,
   Bug, ShieldAlert, RefreshCw,
@@ -2538,6 +2538,8 @@ function AgentTab() {
   const [showForm, setShowForm] = useState(false);
   const [editingEntry, setEditingEntry] = useState<KnowledgeBaseEntry | null>(null);
   const [savedEntryId, setSavedEntryId] = useState<number | null>(null);
+  const [toggledEntryId, setToggledEntryId] = useState<number | null>(null);
+  const toggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { data: entries = [], isLoading } = useQuery<KnowledgeBaseEntry[]>({
     queryKey: ['admin', 'knowledge-base'],
@@ -2580,7 +2582,18 @@ function AgentTab() {
   });
 
   const toggleActive = (entry: KnowledgeBaseEntry) =>
-    update.mutate({ id: entry.id, data: { active: !entry.active } });
+    update.mutate({ id: entry.id, data: { active: !entry.active } }, {
+      onSuccess: () => {
+        if (toggleTimerRef.current) clearTimeout(toggleTimerRef.current);
+        setToggledEntryId(entry.id);
+        toggleTimerRef.current = setTimeout(() => {
+          setToggledEntryId(prev => (prev === entry.id ? null : prev));
+          toggleTimerRef.current = null;
+        }, 1500);
+      },
+    });
+
+  useEffect(() => () => { if (toggleTimerRef.current) clearTimeout(toggleTimerRef.current); }, []);
 
   if (isLoading) {
     return (
@@ -2668,9 +2681,19 @@ function AgentTab() {
                       <button
                         title={entry.active ? 'Deactivate' : 'Activate'}
                         onClick={() => toggleActive(entry)}
-                        className="p-1.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground cursor-pointer"
+                        disabled={update.isPending}
+                        className={cn(
+                          'p-1.5 rounded transition-colors',
+                          update.isPending ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+                          toggledEntryId === entry.id
+                            ? 'text-green-500 bg-green-500/10'
+                            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        )}
                       >
-                        {entry.active ? <Eye size={14} /> : <EyeOff size={14} />}
+                        {toggledEntryId === entry.id
+                          ? <Check size={14} />
+                          : entry.active ? <Eye size={14} /> : <EyeOff size={14} />
+                        }
                       </button>
                       <button
                         title="Edit"
