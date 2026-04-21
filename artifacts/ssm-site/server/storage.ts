@@ -1,7 +1,7 @@
-import { db } from './db';
-import { inquiries, projects, posts, adminUsers, knowledgeBase, galleryImages, projectSections, postSections } from '../shared/schema';
-import { eq, desc, asc } from 'drizzle-orm';
-import type { InsertInquiry, InsertProject, InsertPost, Inquiry, Project, Post, KnowledgeBaseEntry, InsertKnowledgeBaseEntry, GalleryImage, InsertGalleryImage, ProjectSection, InsertProjectSection, PostSection, InsertPostSection } from '../shared/schema';
+import { db, pool } from './db';
+import { inquiries, projects, posts, adminUsers, knowledgeBase, galleryImages, projectSections, postSections, errorLogs } from '../shared/schema';
+import { eq, desc, asc, lt } from 'drizzle-orm';
+import type { InsertInquiry, InsertProject, InsertPost, Inquiry, Project, Post, KnowledgeBaseEntry, InsertKnowledgeBaseEntry, GalleryImage, InsertGalleryImage, ProjectSection, InsertProjectSection, PostSection, InsertPostSection, ErrorLog } from '../shared/schema';
 
 // ── Enquiries ─────────────────────────────────────────────────────────────────
 
@@ -220,4 +220,51 @@ export async function getAdminByUsername(username: string) {
 
 export async function updateAdminPassword(id: number, passwordHash: string): Promise<void> {
   await db.update(adminUsers).set({ passwordHash }).where(eq(adminUsers.id, id));
+}
+
+// ── Error Logs ─────────────────────────────────────────────────────────────────
+
+export interface InsertErrorLog {
+  type: 'user' | 'admin';
+  message: string;
+  detail?: string;
+  path?: string;
+  userAgent?: string;
+}
+
+export async function createErrorLog(data: InsertErrorLog): Promise<ErrorLog> {
+  const [log] = await db.insert(errorLogs).values(data).returning();
+  return log;
+}
+
+export async function getAllErrorLogs(type?: 'user' | 'admin'): Promise<ErrorLog[]> {
+  if (type) {
+    return db.select().from(errorLogs)
+      .where(eq(errorLogs.type, type))
+      .orderBy(desc(errorLogs.createdAt))
+      .limit(500);
+  }
+  return db.select().from(errorLogs)
+    .orderBy(desc(errorLogs.createdAt))
+    .limit(500);
+}
+
+export async function deleteErrorLogById(id: number): Promise<void> {
+  await db.delete(errorLogs).where(eq(errorLogs.id, id));
+}
+
+export async function clearErrorLogs(type?: 'user' | 'admin'): Promise<void> {
+  if (type) {
+    await db.delete(errorLogs).where(eq(errorLogs.type, type));
+  } else {
+    await db.delete(errorLogs);
+  }
+}
+
+export async function purgeOldErrorLogs(): Promise<number> {
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const deleted = await db.delete(errorLogs)
+    .where(lt(errorLogs.createdAt, sevenDaysAgo))
+    .returning();
+  return deleted.length;
 }

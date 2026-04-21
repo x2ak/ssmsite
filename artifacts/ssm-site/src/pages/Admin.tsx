@@ -6,6 +6,7 @@ import {
   LogOut, Plus, Trash2, Edit2, Eye, EyeOff,
   ChevronDown, ChevronUp, CheckCircle, Copy, Link2, BookOpen, Briefcase,
   Upload, ImageIcon, Reply, Send, Layers, X, ArrowLeft, AlertCircle, Info,
+  Bug, ShieldAlert, RefreshCw,
 } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -20,7 +21,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@
 import { apiRequest } from '@/lib/queryClient';
 import { formatDate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
-import type { Inquiry, Project, Post, KnowledgeBaseEntry, GalleryImage, ProjectSection, PostSection } from '@shared/schema';
+import type { Inquiry, Project, Post, KnowledgeBaseEntry, GalleryImage, ProjectSection, PostSection, ErrorLog } from '@shared/schema';
 
 // ── Upload helper — XHR so we get progress events ─────────────────────────────
 
@@ -55,6 +56,22 @@ function xhrUpload<T>(
   });
 }
 
+// ── Error log helper ──────────────────────────────────────────────────────────
+
+function logErrorToServer(message: string, detail?: string) {
+  fetch('/api/log-error', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({
+      type: 'admin',
+      message: message.slice(0, 500),
+      detail: detail ? detail.slice(0, 2000) : undefined,
+      path: window.location.pathname,
+    }),
+  }).catch(() => { /* silent */ });
+}
+
 // ── Toast system ──────────────────────────────────────────────────────────────
 
 type ToastType = 'success' | 'error' | 'info';
@@ -73,6 +90,7 @@ function ToastProvider({ children }: { children: React.ReactNode }) {
     setToasts(prev => [...prev, { id, type, title, detail }]);
     const timeout = type === 'error' ? 6000 : 3500;
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), timeout);
+    if (type === 'error') logErrorToServer(title, detail);
   }, []);
 
   const dismiss = useCallback((id: number) =>
@@ -2810,6 +2828,180 @@ function GalleryTab() {
   );
 }
 
+// ── Error Log tab ─────────────────────────────────────────────────────────────
+
+function timeAgo(date: string | Date | null | undefined): string {
+  if (!date) return '—';
+  const d = typeof date === 'string' ? new Date(date) : date;
+  const secs = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (secs < 60) return 'just now';
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function ErrorLogTab() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [activeType, setActiveType] = useState<'user' | 'admin'>('user');
+
+  const { data: logs = [], isLoading, refetch, isFetching } = useQuery<ErrorLog[]>({
+    queryKey: ['admin', 'error-logs'],
+    queryFn: () => apiRequest<ErrorLog[]>('GET', '/api/admin/error-logs'),
+    refetchInterval: 30_000,
+  });
+
+  const userLogs  = logs.filter(l => l.type === 'user');
+  const adminLogs = logs.filter(l => l.type === 'admin');
+  const activeLogs = activeType === 'user' ? userLogs : adminLogs;
+
+  const dismissOne = useMutation({
+    mutationFn: (id: number) => apiRequest('DELETE', `/api/admin/error-logs/entry/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'error-logs'] }),
+    onError: (err: Error) => toast('error', 'Failed to dismiss entry', err.message),
+  });
+
+  const clearTab = useMutation({
+    mutationFn: (type: 'user' | 'admin') =>
+      apiRequest('DELETE', `/api/admin/error-logs?type=${type}`),
+    onSuccess: (_d, type) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'error-logs'] });
+      toast('success', `${type === 'user' ? 'User' : 'Admin'} error log cleared`);
+    },
+    onError: (err: Error) => toast('error', 'Failed to clear log', err.message),
+  });
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="font-syne font-bold text-xl text-foreground">Error Log</h2>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Auto-refreshes every 30 s · 7-day retention</span>
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-[var(--radius)] border border-border hover:bg-muted transition-colors cursor-pointer disabled:opacity-50"
+          >
+            <RefreshCw size={12} className={isFetching ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      {/* Sub-tab switcher */}
+      <div className="flex gap-1 mb-5 border-b border-border">
+        {(['user', 'admin'] as const).map(type => {
+          const count = type === 'user' ? userLogs.length : adminLogs.length;
+          const Icon = type === 'user' ? Bug : ShieldAlert;
+          const isActive = activeType === type;
+          return (
+            <button
+              key={type}
+              onClick={() => setActiveType(type)}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors cursor-pointer',
+                isActive
+                  ? 'border-primary text-foreground'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+              )}
+            >
+              <Icon size={13} />
+              {type === 'user' ? 'User Errors' : 'Admin Errors'}
+              {count > 0 && (
+                <span className={cn(
+                  'inline-flex items-center justify-center h-4 min-w-[1rem] px-1 text-[10px] font-mono rounded-full',
+                  isActive ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'
+                )}>
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Log list */}
+      {isLoading ? (
+        <div className="space-y-2">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-16 bg-muted animate-pulse rounded-[var(--radius)]" />
+          ))}
+        </div>
+      ) : activeLogs.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <CheckCircle size={32} className="text-primary/40 mb-3" />
+          <p className="text-sm font-medium text-muted-foreground">No {activeType} errors logged</p>
+          <p className="text-xs text-muted-foreground/60 mt-1">Entries auto-delete after 7 days</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {activeLogs.map(log => (
+            <div
+              key={log.id}
+              className="group flex items-start gap-3 border border-border rounded-[var(--radius)] bg-card px-4 py-3 hover:border-destructive/30 transition-colors"
+            >
+              <AlertCircle size={14} className="shrink-0 text-destructive mt-0.5" />
+              <div className="flex-1 min-w-0 space-y-1">
+                <p className="text-sm font-medium text-foreground leading-snug break-words">
+                  {log.message}
+                </p>
+                {log.detail && (
+                  <p className="text-[11px] font-mono text-muted-foreground leading-relaxed break-words whitespace-pre-wrap line-clamp-3">
+                    {log.detail}
+                  </p>
+                )}
+                <div className="flex items-center gap-3 flex-wrap">
+                  {log.path && (
+                    <span className="text-[11px] font-mono text-muted-foreground/70 truncate max-w-[240px]">
+                      {log.path}
+                    </span>
+                  )}
+                  <span className="text-[11px] text-muted-foreground/50">
+                    {timeAgo(log.createdAt)}
+                  </span>
+                  {log.userAgent && activeType === 'user' && (
+                    <span className="text-[11px] text-muted-foreground/40 truncate max-w-[200px]" title={log.userAgent}>
+                      {log.userAgent.split(' ')[0]}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => dismissOne.mutate(log.id)}
+                disabled={dismissOne.isPending}
+                className="shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all cursor-pointer mt-0.5"
+                title="Dismiss"
+              >
+                <X size={13} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Footer actions */}
+      {activeLogs.length > 0 && (
+        <div className="flex justify-end mt-5 pt-4 border-t border-border">
+          <button
+            onClick={() => {
+              if (window.confirm(`Clear all ${activeType} errors? This cannot be undone.`)) {
+                clearTab.mutate(activeType);
+              }
+            }}
+            disabled={clearTab.isPending}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-destructive border border-destructive/30 rounded-[var(--radius)] hover:bg-destructive/10 transition-colors cursor-pointer disabled:opacity-50"
+          >
+            <Trash2 size={12} />
+            Clear {activeType} errors ({activeLogs.length})
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Admin shell ──────────────────────────────────────────────────────────
 
 export default function Admin() {
@@ -2870,6 +3062,7 @@ export default function Admin() {
             <TabsTrigger value="blog">Blog</TabsTrigger>
             <TabsTrigger value="gallery">Gallery</TabsTrigger>
             <TabsTrigger value="agent">Agent</TabsTrigger>
+            <TabsTrigger value="errors">Errors</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
           <TabsContent value="enquiries">
@@ -2886,6 +3079,9 @@ export default function Admin() {
           </TabsContent>
           <TabsContent value="agent">
             <AgentTab />
+          </TabsContent>
+          <TabsContent value="errors">
+            <ErrorLogTab />
           </TabsContent>
           <TabsContent value="settings">
             <SettingsTab />

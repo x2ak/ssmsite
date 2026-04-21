@@ -109,6 +109,18 @@ export const postSections = pgTable('post_sections', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
+// Error logs — captured from public site (user) and admin portal (admin)
+export const errorLogs = pgTable('error_logs', {
+  id: serial('id').primaryKey(),
+  type: text('type').notNull().default('user'),   // 'user' | 'admin'
+  message: text('message').notNull(),
+  detail: text('detail'),
+  path: text('path'),
+  userAgent: text('user_agent'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+export type ErrorLog = typeof errorLogs.$inferSelect;
+
 // Zod schemas
 export const insertKnowledgeBaseSchema = createInsertSchema(knowledgeBase);
 export const selectKnowledgeBaseSchema = createSelectSchema(knowledgeBase);

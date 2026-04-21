@@ -7,6 +7,7 @@ import path from 'path';
 import { registerAuthRoutes } from './auth';
 import { registerRoutes } from './routes';
 import { runMigrations } from './migrations';
+import { purgeOldErrorLogs } from './storage';
 
 const distDir = path.resolve(process.cwd(), 'dist/public');
 
@@ -75,6 +76,16 @@ if (isProd) {
 
 async function start() {
   await runMigrations();
+
+  // Purge error logs older than 7 days on startup, then every 12 hours
+  const runPurge = () =>
+    purgeOldErrorLogs()
+      .then(n => { if (n > 0) console.log(`[error-logs] Purged ${n} entries older than 7 days.`); })
+      .catch(err => console.warn('[error-logs] Purge failed:', err));
+
+  runPurge();
+  setInterval(runPurge, 12 * 60 * 60 * 1000);
+
   app.listen(PORT, () => {
     console.log(`SSM-LTD server running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
     if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET === 'dev-secret-change-in-production') {

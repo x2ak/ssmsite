@@ -16,6 +16,15 @@ const MIGRATIONS = [
     display_order INTEGER DEFAULT 0,
     created_at    TIMESTAMP DEFAULT NOW()
   )`,
+  `CREATE TABLE IF NOT EXISTS error_logs (
+    id          SERIAL PRIMARY KEY,
+    type        TEXT      NOT NULL DEFAULT 'user',
+    message     TEXT      NOT NULL,
+    detail      TEXT,
+    path        TEXT,
+    user_agent  TEXT,
+    created_at  TIMESTAMP DEFAULT NOW()
+  )`,
 ];
 
 export async function runMigrations(): Promise<void> {

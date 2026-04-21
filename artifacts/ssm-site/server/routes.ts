@@ -38,6 +38,10 @@ import {
   updatePostSection,
   deletePostSection,
   reorderPostSections,
+  createErrorLog,
+  getAllErrorLogs,
+  deleteErrorLogById,
+  clearErrorLogs,
 } from './storage';
 import { uploadToGCS, streamGalleryImage, deleteFromGCS } from './imageStorage';
 import { insertInquirySchema } from '../shared/schema';
@@ -608,6 +612,66 @@ export function registerRoutes(app: Express) {
     } catch (err) {
       console.error('Error deleting gallery image:', err);
       res.status(500).json({ error: 'Delete failed' });
+    }
+  });
+
+  // ── Error Logs ──────────────────────────────────────────────────────────────
+
+  // Public endpoint — logs errors from both the public site and admin portal.
+  // Basic guards: body must have a message string, type must be user|admin.
+  app.post('/api/log-error', async (req, res) => {
+    try {
+      const { type, message, detail, path, userAgent } = req.body || {};
+      if (!message || typeof message !== 'string') {
+        res.status(400).json({ error: 'message is required' });
+        return;
+      }
+      const logType = type === 'admin' ? 'admin' : 'user';
+      await createErrorLog({
+        type: logType,
+        message: String(message).slice(0, 1000),
+        detail: detail ? String(detail).slice(0, 3000) : undefined,
+        path: path ? String(path).slice(0, 500) : undefined,
+        userAgent: userAgent ? String(userAgent).slice(0, 300) : undefined,
+      });
+      res.json({ ok: true });
+    } catch (err) {
+      console.error('Error creating error log:', err);
+      res.status(500).json({ error: 'Failed to log error' });
+    }
+  });
+
+  app.get('/api/admin/error-logs', requireAdmin, async (req, res) => {
+    try {
+      const type = req.query.type as 'user' | 'admin' | undefined;
+      const logs = await getAllErrorLogs(type);
+      res.json(logs);
+    } catch (err) {
+      console.error('Error fetching error logs:', err);
+      res.status(500).json({ error: 'Failed to fetch logs' });
+    }
+  });
+
+  app.delete('/api/admin/error-logs/entry/:id', requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) { res.status(400).json({ error: 'Invalid id' }); return; }
+      await deleteErrorLogById(id);
+      res.json({ success: true });
+    } catch (err) {
+      console.error('Error deleting error log entry:', err);
+      res.status(500).json({ error: 'Delete failed' });
+    }
+  });
+
+  app.delete('/api/admin/error-logs', requireAdmin, async (req, res) => {
+    try {
+      const type = req.query.type as 'user' | 'admin' | undefined;
+      await clearErrorLogs(type);
+      res.json({ success: true });
+    } catch (err) {
+      console.error('Error clearing error logs:', err);
+      res.status(500).json({ error: 'Clear failed' });
     }
   });
 }
