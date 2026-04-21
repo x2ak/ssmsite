@@ -52,6 +52,15 @@ export function ChatInterface() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Re-focus input once streaming finishes so the keyboard never disappears
+  useEffect(() => {
+    if (!isStreaming && !isInitialTyping) {
+      // Small delay so mobile browsers register the re-focus after the DOM settles
+      const t = setTimeout(() => inputRef.current?.focus(), 80);
+      return () => clearTimeout(t);
+    }
+  }, [isStreaming, isInitialTyping]);
+
   async function sendMessage() {
     const text = input.trim();
     if (!text || isStreaming || isInitialTyping) return;
@@ -63,6 +72,8 @@ export function ChatInterface() {
 
     setInput('');
     setError(null);
+    // Keep focus so keyboard never closes on mobile
+    inputRef.current?.focus();
 
     const userMessage: Message = { role: 'user', content: text };
     const updatedMessages = [...messages, userMessage];
@@ -264,14 +275,15 @@ export function ChatInterface() {
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Type your message…"
+          placeholder={isInitialTyping ? '' : isStreaming ? 'Zak\'s assistant is typing…' : 'Type your message…'}
           rows={1}
-          disabled={isStreaming || isInitialTyping}
+          readOnly={isStreaming || isInitialTyping}
           className={cn(
             'w-full resize-none rounded-[var(--radius)] border border-border bg-card',
             'px-4 py-3 pr-12 text-sm text-foreground placeholder:text-muted-foreground',
             'focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent',
-            'disabled:opacity-60 transition-colors duration-150',
+            'transition-colors duration-150',
+            (isStreaming || isInitialTyping) && 'opacity-60 cursor-default',
             'min-h-[48px] max-h-[160px]'
           )}
           style={{ height: 'auto', overflow: 'hidden' }}
@@ -285,6 +297,7 @@ export function ChatInterface() {
         <button
           type="submit"
           disabled={!input.trim() || isStreaming || isInitialTyping}
+          onMouseDown={e => e.preventDefault()}
           className={cn(
             'absolute right-3 bottom-3 h-7 w-7 flex items-center justify-center',
             'rounded-[var(--radius)] bg-primary text-primary-foreground',
