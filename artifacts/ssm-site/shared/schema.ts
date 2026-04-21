@@ -49,6 +49,8 @@ export const posts = pgTable('posts', {
   content: text('content').notNull(),
   imageUrl: text('image_url'),
   published: boolean('published').default(false),
+  publishedAt: timestamp('published_at'),
+  readTime: integer('read_time'),
   createdAt: timestamp('created_at').defaultNow(),
 });
 

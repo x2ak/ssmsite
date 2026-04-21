@@ -1,6 +1,8 @@
 import { pool } from './db';
 
 const MIGRATIONS = [
+  `ALTER TABLE posts ADD COLUMN IF NOT EXISTS published_at TIMESTAMP`,
+  `ALTER TABLE posts ADD COLUMN IF NOT EXISTS read_time INTEGER`,
   `CREATE TABLE IF NOT EXISTS post_sections (
     id            SERIAL PRIMARY KEY,
     post_id       INTEGER NOT NULL,

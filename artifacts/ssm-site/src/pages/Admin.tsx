@@ -1814,13 +1814,46 @@ function PostEditor({
     slug: '',
     excerpt: '',
     content: '',
+    imageUrl: '',
     published: false,
     ...initial,
   });
   const [preview, setPreview] = useState(false);
+  const [thumbProgress, setThumbProgress] = useState<number | null>(null);
+  const [thumbError, setThumbError] = useState<string | null>(null);
+  const thumbInputRef = useRef<HTMLInputElement>(null);
 
   function handleChange(field: keyof Post, value: unknown) {
     setForm(prev => ({ ...prev, [field]: value }));
+  }
+
+  async function handleThumbUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setThumbProgress(0);
+    setThumbError(null);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      const img = await xhrUpload<{ id: number }>(
+        '/api/admin/gallery/upload',
+        formData,
+        {},
+        pct => setThumbProgress(pct),
+      );
+      handleChange('imageUrl', `/api/gallery/images/${img.id}`);
+      setThumbProgress(null);
+    } catch (err) {
+      setThumbError((err as Error).message || 'Upload failed');
+      setThumbProgress(null);
+    } finally {
+      if (thumbInputRef.current) thumbInputRef.current.value = '';
+    }
+  }
+
+  function toDateInput(d: Date | string | null | undefined): string {
+    if (!d) return '';
+    try { return new Date(d as string).toISOString().slice(0, 10); } catch { return ''; }
   }
 
   return (
@@ -1839,6 +1872,65 @@ function PostEditor({
         <Label>Excerpt</Label>
         <Textarea value={form.excerpt ?? ''} onChange={e => handleChange('excerpt', e.target.value)} rows={2} />
       </div>
+
+      {/* Thumbnail */}
+      <div className="space-y-1.5">
+        <Label>Thumbnail image</Label>
+        <input type="file" accept="image/*" ref={thumbInputRef} className="hidden" onChange={handleThumbUpload} />
+        <div className="flex gap-2 items-center">
+          <Button type="button" variant="outline" size="sm" onClick={() => thumbInputRef.current?.click()}>
+            <Upload size={13} className="mr-1.5" /> Upload
+          </Button>
+          <Input
+            placeholder="or paste image URL…"
+            value={form.imageUrl ?? ''}
+            onChange={e => handleChange('imageUrl', e.target.value)}
+            className="text-sm"
+          />
+        </div>
+        {thumbProgress !== null && (
+          <div className="h-1.5 rounded bg-muted overflow-hidden">
+            <div className="h-full bg-primary transition-all" style={{ width: `${thumbProgress}%` }} />
+          </div>
+        )}
+        {thumbError && <p className="text-xs text-destructive">{thumbError}</p>}
+        {form.imageUrl && (
+          <div className="relative overflow-hidden rounded-[var(--radius)] border border-border bg-muted mt-1 max-h-40">
+            <img src={form.imageUrl} alt="" className="w-full object-cover max-h-40" />
+            <button
+              type="button"
+              onClick={() => handleChange('imageUrl', '')}
+              className="absolute top-1.5 right-1.5 h-6 w-6 flex items-center justify-center rounded-full bg-background/80 hover:bg-background transition-colors"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Article date + read time */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <Label>Article date <span className="text-muted-foreground font-normal text-xs">(defaults to creation date)</span></Label>
+          <Input
+            type="date"
+            value={toDateInput(form.publishedAt)}
+            onChange={e => handleChange('publishedAt', e.target.value ? new Date(e.target.value) : null)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Read time <span className="text-muted-foreground font-normal text-xs">(mins — auto if blank)</span></Label>
+          <Input
+            type="number"
+            min={1}
+            max={120}
+            placeholder="auto"
+            value={form.readTime ?? ''}
+            onChange={e => handleChange('readTime', e.target.value ? parseInt(e.target.value, 10) : null)}
+          />
+        </div>
+      </div>
+
       <div className="space-y-1.5">
         <div className="flex items-center justify-between mb-1.5">
           <Label>Content (Markdown)</Label>

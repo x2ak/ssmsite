@@ -84,11 +84,11 @@ export default function BlogPost() {
             {/* Meta */}
             <div className="flex items-center gap-4 mb-6">
               <time className="font-mono text-xs text-muted-foreground">
-                {formatDate(post.createdAt!)}
+                {formatDate((post.publishedAt ?? post.createdAt)!)}
               </time>
               <span className="text-muted-foreground/40">·</span>
               <span className="font-mono text-xs text-muted-foreground">
-                {estimateReadTime(post.content)} min read
+                {post.readTime ?? estimateReadTime(post.content)} min read
               </span>
             </div>
 

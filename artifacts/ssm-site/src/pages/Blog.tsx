@@ -44,7 +44,7 @@ function FeaturedPost({ post }: { post: Post }) {
               </span>
               <span className="text-border">·</span>
               <time className="text-[10px] font-mono uppercase tracking-[0.1em] text-muted-foreground">
-                {formatDate(post.createdAt!)}
+                {formatDate((post.publishedAt ?? post.createdAt)!)}
               </time>
             </div>
             <h2
@@ -64,7 +64,7 @@ function FeaturedPost({ post }: { post: Post }) {
             </span>
             <span className="flex items-center gap-1 text-xs text-muted-foreground font-mono">
               <Clock size={11} />
-              {estimateReadTime(post.content)} min
+              {post.readTime ?? estimateReadTime(post.content)} min
             </span>
           </div>
         </div>
@@ -85,12 +85,12 @@ function SecondaryPost({ post, index }: { post: Post; index: number }) {
       >
         <div className="flex items-center gap-2 mb-3">
           <time className="text-[10px] font-mono uppercase tracking-[0.1em] text-muted-foreground">
-            {formatDate(post.createdAt!)}
+            {formatDate((post.publishedAt ?? post.createdAt)!)}
           </time>
           <span className="text-border text-xs">·</span>
           <span className="text-[10px] font-mono uppercase tracking-[0.1em] text-muted-foreground flex items-center gap-1">
             <Clock size={9} />
-            {estimateReadTime(post.content)} min
+            {post.readTime ?? estimateReadTime(post.content)} min
           </span>
         </div>
         <h3 className="font-syne font-bold text-foreground leading-snug mb-2 group-hover:text-primary transition-colors text-base">
