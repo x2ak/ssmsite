@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react';
 import { Navbar } from './Navbar';
 import { Footer } from './Footer';
+import { MarqueeTicker } from './MarqueeTicker';
 
 interface LayoutProps {
   children: ReactNode;
@@ -14,6 +15,7 @@ export function Layout({ children, hideFooter = false }: LayoutProps) {
       <main className="flex-1 pt-16">
         {children}
       </main>
+      <MarqueeTicker />
       {!hideFooter && <Footer />}
     </div>
   );

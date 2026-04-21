@@ -137,6 +137,29 @@ code, pre, kbd, samp {
     50% { opacity: 0.7; box-shadow: 0 0 0 4px hsl(185 100% 50% / 0); }
   }
 
+  /* Marquee ticker scroll */
+  .marquee-track {
+    animation: marquee-scroll 28s linear infinite;
+    will-change: transform;
+  }
+
+  @keyframes marquee-scroll {
+    from { transform: translateX(0); }
+    to   { transform: translateX(calc(-100% / 3)); }
+  }
+
+  /* Grain/noise overlay */
+  .grain-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0.045;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.68' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 300px 300px;
+    background-repeat: repeat;
+  }
+
   /* Shake animation for login error */
   .shake {
     animation: shake 0.4s ease-in-out;

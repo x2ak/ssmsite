@@ -67,6 +67,9 @@ export default function App() {
 
         {/* GDPR cookie consent — rendered outside the transition wrapper so it persists */}
         <CookieConsent />
+
+        {/* Grain/noise texture overlay — fixed, pointer-events-none, persists across page transitions */}
+        <div className="grain-overlay" aria-hidden="true" />
       </ThemeProvider>
     </QueryClientProvider>
   );
