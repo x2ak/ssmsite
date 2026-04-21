@@ -1,5 +1,6 @@
 import { Switch, Route, useLocation } from 'wouter';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useEffect } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { queryClient } from '@/lib/queryClient';
@@ -30,6 +31,10 @@ const pageTransition = {
 
 export default function App() {
   const [location] = useLocation();
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [location]);
 
   return (
     <QueryClientProvider client={queryClient}>
