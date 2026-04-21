@@ -6,7 +6,7 @@ import {
   LogOut, Plus, Trash2, Edit2, Eye, EyeOff, Check,
   ChevronDown, ChevronUp, CheckCircle, Copy, Link2, BookOpen, Briefcase,
   Upload, ImageIcon, Reply, Send, Layers, X, ArrowLeft, AlertCircle, Info,
-  Bug, ShieldAlert, RefreshCw,
+  Bug, ShieldAlert, RefreshCw, Loader2,
 } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -1206,7 +1206,7 @@ function ProjectForm({
               transition={{ duration: 0.15 }}
               style={{ display: 'inline-flex', alignItems: 'center' }}
             >
-              {saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save project'}
+              {saved ? 'Saved ✓' : saving ? <><Loader2 aria-hidden="true" className="animate-spin mr-1.5 h-3.5 w-3.5" />Saving…</> : 'Save project'}
             </motion.span>
           </AnimatePresence>
         </Button>
@@ -2154,7 +2154,7 @@ function PostEditor({
               transition={{ duration: 0.15 }}
               style={{ display: 'inline-flex', alignItems: 'center' }}
             >
-              {saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save post'}
+              {saved ? 'Saved ✓' : saving ? <><Loader2 aria-hidden="true" className="animate-spin mr-1.5 h-3.5 w-3.5" />Saving…</> : 'Save post'}
             </motion.span>
           </AnimatePresence>
         </Button>
@@ -2522,7 +2522,7 @@ function KBForm({
               transition={{ duration: 0.15 }}
               style={{ display: 'inline-flex', alignItems: 'center' }}
             >
-              {saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save entry'}
+              {saved ? 'Saved ✓' : saving ? <><Loader2 aria-hidden="true" className="animate-spin mr-1.5 h-3.5 w-3.5" />Saving…</> : 'Save entry'}
             </motion.span>
           </AnimatePresence>
         </Button>
