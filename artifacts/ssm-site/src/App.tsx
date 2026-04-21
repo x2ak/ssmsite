@@ -13,6 +13,7 @@ import Blog from '@/pages/Blog';
 import BlogPost from '@/pages/BlogPost';
 import Contact from '@/pages/Contact';
 import Admin from '@/pages/Admin';
+import Privacy from '@/pages/Privacy';
 import NotFound from '@/pages/not-found';
 import CookieConsent from '@/components/CookieConsent';
 
@@ -53,6 +54,7 @@ export default function App() {
               <Route path="/blog/:slug" component={BlogPost} />
               <Route path="/contact" component={Contact} />
               <Route path="/x7-control" component={Admin} />
+              <Route path="/privacy" component={Privacy} />
               <Route component={NotFound} />
             </Switch>
           </motion.div>
