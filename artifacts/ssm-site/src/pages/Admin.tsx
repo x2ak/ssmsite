@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, createContext, useContext, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import {
   LogOut, Plus, Trash2, Edit2, Eye, EyeOff,
   ChevronDown, ChevronUp, CheckCircle, Copy, Link2, BookOpen, Briefcase,
-  Upload, ImageIcon, Reply, Send, Layers, X, ArrowLeft,
+  Upload, ImageIcon, Reply, Send, Layers, X, ArrowLeft, AlertCircle, Info,
 } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -54,6 +54,78 @@ function xhrUpload<T>(
     xhr.send(body);
   });
 }
+
+// ── Toast system ──────────────────────────────────────────────────────────────
+
+type ToastType = 'success' | 'error' | 'info';
+interface ToastItem { id: number; type: ToastType; title: string; detail?: string; }
+type AddToast = (type: ToastType, title: string, detail?: string) => void;
+
+const ToastContext = createContext<AddToast>(() => {});
+
+let _toastCounter = 0;
+
+function ToastProvider({ children }: { children: React.ReactNode }) {
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  const addToast = useCallback<AddToast>((type, title, detail) => {
+    const id = ++_toastCounter;
+    setToasts(prev => [...prev, { id, type, title, detail }]);
+    const timeout = type === 'error' ? 6000 : 3500;
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), timeout);
+  }, []);
+
+  const dismiss = useCallback((id: number) =>
+    setToasts(prev => prev.filter(t => t.id !== id)), []);
+
+  const iconFor = (type: ToastType) => {
+    if (type === 'success') return <CheckCircle size={15} className="shrink-0 text-primary mt-0.5" />;
+    if (type === 'error')   return <AlertCircle size={15} className="shrink-0 text-destructive mt-0.5" />;
+    return <Info size={15} className="shrink-0 text-muted-foreground mt-0.5" />;
+  };
+
+  const borderFor = (type: ToastType) => {
+    if (type === 'success') return 'border-primary/25';
+    if (type === 'error')   return 'border-destructive/30';
+    return 'border-border';
+  };
+
+  return (
+    <ToastContext.Provider value={addToast}>
+      {children}
+      <div className="fixed bottom-5 right-5 z-[9999] flex flex-col gap-2 pointer-events-none">
+        <AnimatePresence initial={false}>
+          {toasts.map(t => (
+            <motion.div
+              key={t.id}
+              initial={{ opacity: 0, x: 48, scale: 0.95 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 48, scale: 0.95 }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              className={`pointer-events-auto flex items-start gap-3 min-w-[280px] max-w-[380px] rounded-[var(--radius)] border bg-card shadow-lg px-4 py-3 ${borderFor(t.type)}`}
+            >
+              {iconFor(t.type)}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium leading-snug text-foreground">{t.title}</p>
+                {t.detail && (
+                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed break-words">{t.detail}</p>
+                )}
+              </div>
+              <button
+                onClick={() => dismiss(t.id)}
+                className="shrink-0 text-muted-foreground hover:text-foreground transition-colors mt-0.5 cursor-pointer"
+              >
+                <X size={13} />
+              </button>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+    </ToastContext.Provider>
+  );
+}
+
+function useToast() { return useContext(ToastContext); }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
@@ -142,6 +214,7 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
 
 function EnquiriesTab() {
   const qc = useQueryClient();
+  const toast = useToast();
   const [expanded, setExpanded] = useState<number | null>(null);
   const [replyOpenFor, setReplyOpenFor] = useState<number | null>(null);
   const [replyText, setReplyText] = useState('');
@@ -179,7 +252,11 @@ function EnquiriesTab() {
   const updateStatus = useMutation({
     mutationFn: ({ id, status }: { id: number; status: string }) =>
       apiRequest('PATCH', `/api/admin/inquiries/${id}`, { status }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'inquiries'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'inquiries'] });
+      toast('success', 'Status updated');
+    },
+    onError: (err: Error) => toast('error', 'Failed to update status', err.message),
   });
 
   const deleteInquiryMutation = useMutation({
@@ -188,7 +265,9 @@ function EnquiriesTab() {
       qc.invalidateQueries({ queryKey: ['admin', 'inquiries'] });
       setExpanded(null);
       setReplyOpenFor(null);
+      toast('success', 'Enquiry deleted');
     },
+    onError: (err: Error) => toast('error', 'Failed to delete enquiry', err.message),
   });
 
   const replyMutation = useMutation({
@@ -198,9 +277,11 @@ function EnquiriesTab() {
       qc.invalidateQueries({ queryKey: ['admin', 'inquiries'] });
       setReplySentIds(prev => [...prev, vars.id]);
       closeReply();
+      toast('success', 'Reply sent');
     },
-    onError: () => {
+    onError: (err: Error) => {
       setReplyError('Failed to send — check your email config and try again.');
+      toast('error', 'Reply failed to send', err.message);
     },
   });
 
@@ -541,6 +622,7 @@ function SectionEditor({
 
 function SectionsPanel({ projectId }: { projectId: number }) {
   const qc = useQueryClient();
+  const toast = useToast();
   const [addingNew, setAddingNew] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
 
@@ -555,7 +637,9 @@ function SectionsPanel({ projectId }: { projectId: number }) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'sections', projectId] });
       setAddingNew(false);
+      toast('success', 'Section added');
     },
+    onError: (err: Error) => toast('error', 'Failed to add section', err.message),
   });
 
   const updateSection = useMutation({
@@ -564,7 +648,9 @@ function SectionsPanel({ projectId }: { projectId: number }) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'sections', projectId] });
       setEditingId(null);
+      toast('success', 'Section saved');
     },
+    onError: (err: Error) => toast('error', 'Failed to save section', err.message),
   });
 
   const deleteSection = useMutation({
@@ -572,7 +658,9 @@ function SectionsPanel({ projectId }: { projectId: number }) {
       apiRequest('DELETE', `/api/admin/projects/${projectId}/sections/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'sections', projectId] });
+      toast('success', 'Section deleted');
     },
+    onError: (err: Error) => toast('error', 'Failed to delete section', err.message),
   });
 
   return (
@@ -1086,6 +1174,7 @@ function ProjectForm({
 
 function PortfolioTab() {
   const qc = useQueryClient();
+  const toast = useToast();
   const [editProject, setEditProject] = useState<Project | null>(null);
   const [addingNew, setAddingNew] = useState(false);
   const [sectionsOpenFor, setSectionsOpenFor] = useState<number | null>(null);
@@ -1104,8 +1193,12 @@ function PortfolioTab() {
       qc.invalidateQueries({ queryKey: ['admin', 'projects'] });
       setAddingNew(false);
       setProjectError(null);
+      toast('success', 'Project created');
     },
-    onError: (err: Error) => setProjectError(err.message || 'Failed to save project'),
+    onError: (err: Error) => {
+      setProjectError(err.message || 'Failed to save project');
+      toast('error', 'Failed to create project', err.message);
+    },
   });
 
   const updateProject = useMutation({
@@ -1115,14 +1208,22 @@ function PortfolioTab() {
       qc.invalidateQueries({ queryKey: ['admin', 'projects'] });
       setEditProject(null);
       setProjectError(null);
+      toast('success', 'Project saved');
     },
-    onError: (err: Error) => setProjectError(err.message || 'Failed to save project'),
+    onError: (err: Error) => {
+      setProjectError(err.message || 'Failed to save project');
+      toast('error', 'Failed to save project', err.message);
+    },
   });
 
   const deleteProject = useMutation({
     mutationFn: (id: number) =>
       apiRequest('DELETE', `/api/admin/projects/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'projects'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'projects'] });
+      toast('success', 'Project deleted');
+    },
+    onError: (err: Error) => toast('error', 'Failed to delete project', err.message),
   });
 
   return (
@@ -1652,6 +1753,7 @@ function PostSectionEditor({
 
 function PostSectionsPanel({ postId }: { postId: number }) {
   const qc = useQueryClient();
+  const toast = useToast();
   const [addingNew, setAddingNew] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
 
@@ -1662,23 +1764,38 @@ function PostSectionsPanel({ postId }: { postId: number }) {
 
   const createSection = useMutation({
     mutationFn: (data: object) => apiRequest('POST', `/api/admin/posts/${postId}/sections`, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin', 'post-sections', postId] }); setAddingNew(false); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'post-sections', postId] });
+      setAddingNew(false);
+      toast('success', 'Section added');
+    },
+    onError: (err: Error) => toast('error', 'Failed to add section', err.message),
   });
 
   const updateSection = useMutation({
     mutationFn: ({ id, data }: { id: number; data: object }) =>
       apiRequest('PATCH', `/api/admin/post-sections/${id}`, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin', 'post-sections', postId] }); setEditingId(null); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'post-sections', postId] });
+      setEditingId(null);
+      toast('success', 'Section saved');
+    },
+    onError: (err: Error) => toast('error', 'Failed to save section', err.message),
   });
 
   const deleteSection = useMutation({
     mutationFn: (id: number) => apiRequest('DELETE', `/api/admin/post-sections/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'post-sections', postId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'post-sections', postId] });
+      toast('success', 'Section deleted');
+    },
+    onError: (err: Error) => toast('error', 'Failed to delete section', err.message),
   });
 
   const reorder = useMutation({
     mutationFn: (ids: number[]) => apiRequest('POST', '/api/admin/post-sections/reorder', { ids }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'post-sections', postId] }),
+    onError: (err: Error) => toast('error', 'Failed to reorder sections', err.message),
   });
 
   function moveSection(idx: number, dir: -1 | 1) {
@@ -1975,6 +2092,7 @@ function PostEditor({
 
 function BlogTab() {
   const qc = useQueryClient();
+  const toast = useToast();
   const [editPost, setEditPost] = useState<Post | null>(null);
   const [addingNew, setAddingNew] = useState(false);
   const [sectionsPostId, setSectionsPostId] = useState<number | null>(null);
@@ -1990,7 +2108,9 @@ function BlogTab() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'posts'] });
       setAddingNew(false);
+      toast('success', 'Post created');
     },
+    onError: (err: Error) => toast('error', 'Failed to create post', err.message),
   });
 
   const updatePost = useMutation({
@@ -1999,13 +2119,19 @@ function BlogTab() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'posts'] });
       setEditPost(null);
+      toast('success', 'Post saved');
     },
+    onError: (err: Error) => toast('error', 'Failed to save post', err.message),
   });
 
   const deletePost = useMutation({
     mutationFn: (id: number) =>
       apiRequest('DELETE', `/api/admin/posts/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'posts'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'posts'] });
+      toast('success', 'Post deleted');
+    },
+    onError: (err: Error) => toast('error', 'Failed to delete post', err.message),
   });
 
   return (
@@ -2308,6 +2434,7 @@ function KBForm({
 
 function AgentTab() {
   const qc = useQueryClient();
+  const toast = useToast();
   const [showForm, setShowForm] = useState(false);
   const [editingEntry, setEditingEntry] = useState<KnowledgeBaseEntry | null>(null);
 
@@ -2322,7 +2449,9 @@ function AgentTab() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'knowledge-base'] });
       setShowForm(false);
+      toast('success', 'Knowledge entry added');
     },
+    onError: (err: Error) => toast('error', 'Failed to add entry', err.message),
   });
 
   const update = useMutation({
@@ -2331,12 +2460,18 @@ function AgentTab() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'knowledge-base'] });
       setEditingEntry(null);
+      toast('success', 'Entry updated');
     },
+    onError: (err: Error) => toast('error', 'Failed to update entry', err.message),
   });
 
   const remove = useMutation({
     mutationFn: (id: number) => apiRequest('DELETE', `/api/admin/knowledge-base/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'knowledge-base'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'knowledge-base'] });
+      toast('success', 'Entry deleted');
+    },
+    onError: (err: Error) => toast('error', 'Failed to delete entry', err.message),
   });
 
   const toggleActive = (entry: KnowledgeBaseEntry) =>
@@ -2461,6 +2596,7 @@ function AgentTab() {
 
 function GalleryTab() {
   const qc = useQueryClient();
+  const toast = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [assigningId, setAssigningId] = useState<number | null>(null);
@@ -2497,8 +2633,9 @@ function GalleryTab() {
         throw new Error((err as { error?: string }).error || 'Upload failed');
       }
       await qc.invalidateQueries({ queryKey: ['admin', 'gallery'] });
+      toast('success', 'Image uploaded');
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Upload failed');
+      toast('error', 'Upload failed', err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -2507,7 +2644,11 @@ function GalleryTab() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => apiRequest('DELETE', `/api/admin/gallery/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'gallery'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'gallery'] });
+      toast('success', 'Image deleted');
+    },
+    onError: (err: Error) => toast('error', 'Failed to delete image', err.message),
   });
 
   async function assignToProject(imageId: number, projectId: string) {
@@ -2516,6 +2657,9 @@ function GalleryTab() {
     try {
       await apiRequest('PATCH', `/api/admin/projects/${projectId}`, { imageUrl: `/api/gallery/images/${imageId}` });
       await qc.invalidateQueries({ queryKey: ['admin', 'projects'] });
+      toast('success', 'Assigned to project');
+    } catch (err) {
+      toast('error', 'Failed to assign to project', err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setAssigningId(null);
     }
@@ -2528,6 +2672,9 @@ function GalleryTab() {
         await apiRequest('PATCH', `/api/admin/posts/${postId}`, { imageUrl: `/api/gallery/images/${imageId}` });
       }
       await qc.invalidateQueries({ queryKey: ['admin', 'posts'] });
+      toast('success', 'Assigned to post');
+    } catch (err) {
+      toast('error', 'Failed to assign to post', err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setAssigningId(null);
     }
@@ -2692,6 +2839,7 @@ export default function Admin() {
   }
 
   return (
+    <ToastProvider>
     <div className="min-h-screen bg-background">
       {/* Admin header */}
       <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-md">
@@ -2745,5 +2893,6 @@ export default function Admin() {
         </Tabs>
       </main>
     </div>
+    </ToastProvider>
   );
 }
