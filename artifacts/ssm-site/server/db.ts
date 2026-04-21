@@ -9,6 +9,9 @@ if (!process.env.DATABASE_URL) {
 // Standard PostgreSQL pool — works with Railway, Supabase, and any TCP-accessible Postgres.
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  // Replit's managed PostgreSQL uses a self-signed certificate, so TLS
+  // hostname verification must be disabled in production. The connection
+  // is still encrypted; only the cert is not verified against a CA.
   ssl: process.env.NODE_ENV === 'production'
     ? { rejectUnauthorized: false }
     : false,

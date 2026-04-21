@@ -12,9 +12,32 @@ function getResend(): Resend {
   return new Resend(key);
 }
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
+
+function escapeMessage(str: string): string {
+  return escapeHtml(str).replace(/\n/g, '<br>');
+}
+
+function safeMailto(email: string): string {
+  const safe = encodeURIComponent(email.replace(/[^a-zA-Z0-9._%+\-@]/g, ''));
+  return `mailto:${safe}`;
+}
+
 export async function sendEnquiryNotification(inquiry: Inquiry): Promise<void> {
   const resend = getResend();
   const sourceLabel = inquiry.source === 'chat' ? 'AI Chat' : 'Contact Form';
+  const firstName = escapeHtml(inquiry.firstName);
+  const lastName = escapeHtml(inquiry.lastName);
+  const email = escapeHtml(inquiry.email);
+  const phone = inquiry.phone ? escapeHtml(inquiry.phone) : null;
+  const message = escapeMessage(inquiry.message);
 
   await resend.emails.send({
     from: FROM_ADDRESS,
@@ -28,13 +51,13 @@ export async function sendEnquiryNotification(inquiry: Inquiry): Promise<void> {
         <table style="width:100%;border-collapse:collapse;">
           <tr>
             <td style="padding:0.5rem 0;font-weight:600;width:140px;">Name</td>
-            <td>${inquiry.firstName} ${inquiry.lastName}</td>
+            <td>${firstName} ${lastName}</td>
           </tr>
           <tr>
             <td style="padding:0.5rem 0;font-weight:600;">Email</td>
-            <td><a href="mailto:${inquiry.email}">${inquiry.email}</a></td>
+            <td><a href="${safeMailto(inquiry.email)}">${email}</a></td>
           </tr>
-          ${inquiry.phone ? `<tr><td style="padding:0.5rem 0;font-weight:600;">Phone</td><td>${inquiry.phone}</td></tr>` : ''}
+          ${phone ? `<tr><td style="padding:0.5rem 0;font-weight:600;">Phone</td><td>${phone}</td></tr>` : ''}
           <tr>
             <td style="padding:0.5rem 0;font-weight:600;">Source</td>
             <td>${sourceLabel}</td>
@@ -46,7 +69,7 @@ export async function sendEnquiryNotification(inquiry: Inquiry): Promise<void> {
         </table>
         <h3 style="margin-top:1.5rem;">Message</h3>
         <div style="background:#f5f5f5;padding:1rem;border-radius:4px;border-left:4px solid #00c8d7;">
-          ${inquiry.message.replace(/\n/g, '<br>')}
+          ${message}
         </div>
       </div>
     `,
@@ -55,6 +78,9 @@ export async function sendEnquiryNotification(inquiry: Inquiry): Promise<void> {
 
 export async function sendEnquiryReply(inquiry: Inquiry, body: string): Promise<void> {
   const resend = getResend();
+  const firstName = escapeHtml(inquiry.firstName);
+  const replyBody = escapeMessage(body);
+
   await resend.emails.send({
     from: FROM_ADDRESS,
     to: inquiry.email,
@@ -67,8 +93,8 @@ export async function sendEnquiryReply(inquiry: Inquiry, body: string): Promise<
           <h1 style="color:#fff;margin:0;font-size:1.5rem;">Re: Your enquiry</h1>
         </div>
         <div style="background:#fff;padding:2rem;border-radius:0 0 8px 8px;border:1px solid #e5e5e5;">
-          <p>Hi ${inquiry.firstName},</p>
-          <div style="margin:1.5rem 0;white-space:pre-wrap;">${body.replace(/\n/g, '<br>')}</div>
+          <p>Hi ${firstName},</p>
+          <div style="margin:1.5rem 0;white-space:pre-wrap;">${replyBody}</div>
           <hr style="border:none;border-top:1px solid #e5e5e5;margin:1.5rem 0;">
           <p style="margin:0;color:#555;font-size:0.9rem;">
             <strong>Zakria</strong><br>
@@ -77,7 +103,7 @@ export async function sendEnquiryReply(inquiry: Inquiry, body: string): Promise<
           </p>
         </div>
         <p style="text-align:center;font-size:0.75rem;color:#999;margin-top:1rem;">
-          © ${new Date().getFullYear()} Secure Solutions Midlands Ltd
+          &copy; ${new Date().getFullYear()} Secure Solutions Midlands Ltd
         </p>
       </div>
     `,
@@ -86,6 +112,9 @@ export async function sendEnquiryReply(inquiry: Inquiry, body: string): Promise<
 
 export async function sendEnquiryConfirmation(inquiry: Inquiry): Promise<void> {
   const resend = getResend();
+  const firstName = escapeHtml(inquiry.firstName);
+  const message = escapeMessage(inquiry.message);
+
   await resend.emails.send({
     from: FROM_ADDRESS,
     to: inquiry.email,
@@ -94,17 +123,17 @@ export async function sendEnquiryConfirmation(inquiry: Inquiry): Promise<void> {
       <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;color:#0f0f0f;">
         <div style="background:#0a0a0a;padding:2rem;border-radius:8px 8px 0 0;">
           <p style="color:#00c8d7;font-family:monospace;font-size:0.875rem;margin:0 0 0.5rem;">SECURE SOLUTIONS MIDLANDS</p>
-          <h1 style="color:#fff;margin:0;font-size:1.75rem;">We've got your message.</h1>
+          <h1 style="color:#fff;margin:0;font-size:1.75rem;">We&#x27;ve got your message.</h1>
         </div>
         <div style="background:#fff;padding:2rem;border-radius:0 0 8px 8px;border:1px solid #e5e5e5;">
-          <p>Hi ${inquiry.firstName},</p>
+          <p>Hi ${firstName},</p>
           <p>
-            Thank you for getting in touch. We've received your enquiry and Zakria will
+            Thank you for getting in touch. We&#x27;ve received your enquiry and Zakria will
             personally review it and get back to you within <strong>24 hours</strong>.
           </p>
-          <p>Here's a summary of what you sent us:</p>
+          <p>Here&#x27;s a summary of what you sent us:</p>
           <div style="background:#f9f9f9;padding:1rem;border-radius:4px;border-left:4px solid #00c8d7;margin:1rem 0;">
-            ${inquiry.message.replace(/\n/g, '<br>')}
+            ${message}
           </div>
           <p>
             In the meantime, if you have anything urgent, you can reach us directly at
@@ -117,7 +146,7 @@ export async function sendEnquiryConfirmation(inquiry: Inquiry): Promise<void> {
           </p>
         </div>
         <p style="text-align:center;font-size:0.75rem;color:#999;margin-top:1rem;">
-          © ${new Date().getFullYear()} Secure Solutions Midlands Ltd · Your Vision, Safely Implemented.
+          &copy; ${new Date().getFullYear()} Secure Solutions Midlands Ltd &middot; Your Vision, Safely Implemented.
         </p>
       </div>
     `,
