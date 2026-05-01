@@ -19,9 +19,8 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
 import { apiRequest } from '@/lib/queryClient';
-import { formatDate } from '@/lib/utils';
-import { cn } from '@/lib/utils';
-import type { Inquiry, Project, Post, KnowledgeBaseEntry, GalleryImage, ProjectSection, PostSection, ErrorLog } from '@shared/schema';
+import { cn, formatDate, timeAgo } from '@/lib/utils';
+import type { Inquiry, Project, Post, KnowledgeBaseEntry, GalleryImage, ProjectSection, PostSection, ErrorLog, Client, ClientTask, ClientInvoice, ClientContactHistory, ClientFile } from '@shared/schema';
 
 // ── Upload helper — XHR so we get progress events ─────────────────────────────
 
@@ -297,6 +296,15 @@ function EnquiriesTab() {
     onError: (err: Error) => toast('error', 'Failed to delete enquiry', err.message),
   });
 
+  const promote = useMutation({
+    mutationFn: (id: number) => apiRequest('POST', `/api/admin/clients/from-inquiry/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'inquiries'] });
+      toast('success', 'Promoted to client');
+    },
+    onError: (err: Error) => toast('error', 'Failed to promote to client', err.message),
+  });
+
   const replyMutation = useMutation({
     mutationFn: ({ id, body }: { id: number; body: string }) =>
       apiRequest('POST', `/api/admin/inquiries/${id}/reply`, { body }),
@@ -479,6 +487,15 @@ function EnquiriesTab() {
                       {s}
                     </button>
                   ))}
+                  {inq.status !== 'converted' && (
+                    <button
+                      onClick={() => promote.mutate(inq.id)}
+                      disabled={promote.isPending}
+                      className="flex items-center gap-1.5 px-3 py-1 text-xs rounded-[var(--radius)] border border-primary/40 text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      Promote to Client
+                    </button>
+                  )}
                 </div>
                 <button
                   onClick={() => {
@@ -3001,18 +3018,6 @@ function GalleryTab() {
 
 // ── Error Log tab ─────────────────────────────────────────────────────────────
 
-function timeAgo(date: string | Date | null | undefined): string {
-  if (!date) return '—';
-  const d = typeof date === 'string' ? new Date(date) : date;
-  const secs = Math.floor((Date.now() - d.getTime()) / 1000);
-  if (secs < 60) return 'just now';
-  const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-}
-
 function ErrorLogTab() {
   const qc = useQueryClient();
   const toast = useToast();
@@ -3173,6 +3178,547 @@ function ErrorLogTab() {
   );
 }
 
+// ── CRM helpers ───────────────────────────────────────────────────────────────
+
+function PriorityBadge({ p }: { p: number }) {
+  const map: Record<number, { label: string; cls: string }> = {
+    1: { label: 'P1', cls: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' },
+    2: { label: 'P2', cls: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400' },
+    3: { label: 'P3', cls: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' },
+    4: { label: 'P4', cls: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
+    5: { label: 'P5', cls: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400' },
+  };
+  const { label, cls } = map[p] ?? map[3];
+  return <span className={cn('text-xs font-semibold px-1.5 py-0.5 rounded', cls)}>{label}</span>;
+}
+
+function invoiceStatusCls(s: string) {
+  if (s === 'paid') return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
+  if (s === 'outstanding') return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400';
+  if (s === 'overdue') return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
+  return 'bg-gray-100 text-gray-600';
+}
+
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string).split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function contractPill(start?: string | null, end?: string | null) {
+  if (!start) return null;
+  const s = formatDate(start);
+  const e = end ? formatDate(end) : 'ongoing';
+  return <span className="text-xs text-muted-foreground">{s} → {e}</span>;
+}
+
+function Initials({ name }: { name: string }) {
+  const parts = name.trim().split(/\s+/);
+  const initials = parts.length >= 2 ? parts[0][0] + parts[parts.length - 1][0] : parts[0].slice(0, 2);
+  return (
+    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary uppercase">
+      {initials}
+    </div>
+  );
+}
+
+// ── CRM: ClientOverview ────────────────────────────────────────────────────────
+
+function ClientOverview({ client, onUpdated }: { client: Client; onUpdated: () => void }) {
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState<Partial<Client>>(client);
+
+  const save = useMutation({
+    mutationFn: () => apiRequest('PATCH', `/api/admin/clients/${client.id}`, form),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['/api/admin/clients'] }); onUpdated(); setEditing(false); },
+  });
+
+  if (!editing) return (
+    <div className="space-y-4">
+      <div className="flex gap-2">
+        <button onClick={() => setEditing(true)} className="text-sm px-3 py-1.5 rounded bg-primary text-primary-foreground">Edit</button>
+      </div>
+      <dl className="grid grid-cols-2 gap-3 text-sm">
+        <div><dt className="text-muted-foreground">Company</dt><dd className="font-medium">{client.companyName}</dd></div>
+        <div><dt className="text-muted-foreground">Contact</dt><dd>{client.primaryContactName}</dd></div>
+        <div><dt className="text-muted-foreground">Email</dt><dd>{client.email}</dd></div>
+        <div><dt className="text-muted-foreground">Phone</dt><dd>{client.phone ?? '—'}</dd></div>
+        <div><dt className="text-muted-foreground">Service</dt><dd>{client.serviceType}</dd></div>
+        <div><dt className="text-muted-foreground">Status</dt><dd className="capitalize">{client.status}</dd></div>
+        <div><dt className="text-muted-foreground">Invoice status</dt><dd className={cn('capitalize inline-block px-1.5 py-0.5 rounded text-xs font-semibold', invoiceStatusCls(client.invoiceStatus))}>{client.invoiceStatus}</dd></div>
+        <div><dt className="text-muted-foreground">Contract</dt><dd>{contractPill(client.contractStart as string, client.contractEnd as string) ?? '—'}</dd></div>
+        {client.notes && <div className="col-span-2"><dt className="text-muted-foreground">Notes</dt><dd className="whitespace-pre-wrap">{client.notes}</dd></div>}
+      </dl>
+    </div>
+  );
+
+  return (
+    <form onSubmit={e => { e.preventDefault(); save.mutate(); }} className="space-y-3">
+      {[
+        ['companyName', 'Company name'],
+        ['primaryContactName', 'Contact name'],
+        ['email', 'Email'],
+        ['phone', 'Phone'],
+        ['serviceType', 'Service type'],
+      ].map(([k, label]) => (
+        <div key={k}>
+          <label className="text-xs text-muted-foreground block mb-1">{label}</label>
+          <input className="w-full border rounded px-2 py-1 text-sm bg-background" value={(form as Record<string, string>)[k] ?? ''} onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))} />
+        </div>
+      ))}
+      <div>
+        <label className="text-xs text-muted-foreground block mb-1">Status</label>
+        <select className="w-full border rounded px-2 py-1 text-sm bg-background" value={form.status ?? 'active'} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
+          {['active', 'inactive', 'churned'].map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="text-xs text-muted-foreground block mb-1">Invoice status</label>
+        <select className="w-full border rounded px-2 py-1 text-sm bg-background" value={form.invoiceStatus ?? 'paid'} onChange={e => setForm(f => ({ ...f, invoiceStatus: e.target.value }))}>
+          {['paid', 'outstanding', 'overdue'].map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="text-xs text-muted-foreground block mb-1">Notes</label>
+        <textarea className="w-full border rounded px-2 py-1 text-sm bg-background" rows={3} value={form.notes ?? ''} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+      </div>
+      <div className="flex gap-2">
+        <button type="submit" className="text-sm px-3 py-1.5 rounded bg-primary text-primary-foreground">Save</button>
+        <button type="button" onClick={() => setEditing(false)} className="text-sm px-3 py-1.5 rounded border">Cancel</button>
+      </div>
+    </form>
+  );
+}
+
+// ── CRM: ClientTasks ───────────────────────────────────────────────────────────
+
+function ClientTasks({ clientId }: { clientId: number }) {
+  const qc = useQueryClient();
+  const { data: tasks = [] } = useQuery<ClientTask[]>({ queryKey: [`/api/admin/clients/${clientId}/tasks`] });
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ title: '', description: '', priority: 3, dueDate: '' });
+
+  const add = useMutation({
+    mutationFn: () => apiRequest('POST', '/api/admin/tasks', { ...form, clientId, priority: Number(form.priority) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: [`/api/admin/clients/${clientId}/tasks`] }); setShowForm(false); setForm({ title: '', description: '', priority: 3, dueDate: '' }); },
+  });
+
+  const toggle = useMutation({
+    mutationFn: (t: ClientTask) => apiRequest('PATCH', `/api/admin/tasks/${t.id}`, { status: t.status === 'open' ? 'done' : 'open' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [`/api/admin/clients/${clientId}/tasks`] }),
+  });
+
+  const del = useMutation({
+    mutationFn: (id: number) => apiRequest('DELETE', `/api/admin/tasks/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [`/api/admin/clients/${clientId}/tasks`] }),
+  });
+
+  return (
+    <div className="space-y-3">
+      <button onClick={() => setShowForm(s => !s)} className="text-sm px-3 py-1.5 rounded bg-primary text-primary-foreground">+ Add task</button>
+      {showForm && (
+        <form onSubmit={e => { e.preventDefault(); add.mutate(); }} className="border rounded p-3 space-y-2">
+          <input required placeholder="Title" className="w-full border rounded px-2 py-1 text-sm bg-background" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
+          <textarea placeholder="Description" className="w-full border rounded px-2 py-1 text-sm bg-background" rows={2} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+          <div className="flex gap-2">
+            <select className="border rounded px-2 py-1 text-sm bg-background" value={form.priority} onChange={e => setForm(f => ({ ...f, priority: Number(e.target.value) }))}>
+              {[1,2,3,4,5].map(p => <option key={p} value={p}>P{p}</option>)}
+            </select>
+            <input type="date" className="border rounded px-2 py-1 text-sm bg-background" value={form.dueDate} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} />
+          </div>
+          <div className="flex gap-2">
+            <button type="submit" className="text-sm px-3 py-1.5 rounded bg-primary text-primary-foreground">Add</button>
+            <button type="button" onClick={() => setShowForm(false)} className="text-sm px-3 py-1.5 rounded border">Cancel</button>
+          </div>
+        </form>
+      )}
+      <ul className="space-y-2">
+        {tasks.map(t => (
+          <li key={t.id} className="flex items-start gap-2 border rounded p-2">
+            <input type="checkbox" checked={t.status === 'done'} onChange={() => toggle.mutate(t)} className="mt-1" />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <PriorityBadge p={t.priority} />
+                <span className={cn('text-sm font-medium', t.status === 'done' && 'line-through text-muted-foreground')}>{t.title}</span>
+              </div>
+              {t.description && <p className="text-xs text-muted-foreground mt-0.5">{t.description}</p>}
+              {t.dueDate && <p className="text-xs text-muted-foreground">Due {formatDate(t.dueDate as string)}</p>}
+            </div>
+            <button onClick={() => del.mutate(t.id)} className="text-xs text-muted-foreground hover:text-destructive">✕</button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// ── CRM: ClientInvoices ────────────────────────────────────────────────────────
+
+function ClientInvoices({ clientId }: { clientId: number }) {
+  const qc = useQueryClient();
+  const { data: invoices = [] } = useQuery<ClientInvoice[]>({ queryKey: [`/api/admin/clients/${clientId}/invoices`] });
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ amount: '', currency: 'GBP', status: 'outstanding', notes: '', dueDate: '' });
+  const [file, setFile] = useState<File | null>(null);
+
+  const add = useMutation({
+    mutationFn: async () => {
+      const body: Record<string, unknown> = { ...form };
+      if (file) {
+        body.content = await readFileAsBase64(file);
+        body.filename = file.name;
+        body.contentType = file.type || 'application/pdf';
+      }
+      return apiRequest('POST', `/api/admin/clients/${clientId}/invoices`, body);
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: [`/api/admin/clients/${clientId}/invoices`] }); setShowForm(false); setForm({ amount: '', currency: 'GBP', status: 'outstanding', notes: '', dueDate: '' }); setFile(null); },
+  });
+
+  const del = useMutation({
+    mutationFn: (id: number) => apiRequest('DELETE', `/api/admin/invoices/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [`/api/admin/clients/${clientId}/invoices`] }),
+  });
+
+  return (
+    <div className="space-y-3">
+      <button onClick={() => setShowForm(s => !s)} className="text-sm px-3 py-1.5 rounded bg-primary text-primary-foreground">+ Add invoice</button>
+      {showForm && (
+        <form onSubmit={e => { e.preventDefault(); add.mutate(); }} className="border rounded p-3 space-y-2">
+          <div className="flex gap-2">
+            <input required placeholder="Amount e.g. 1500.00" className="flex-1 border rounded px-2 py-1 text-sm bg-background" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
+            <select className="border rounded px-2 py-1 text-sm bg-background" value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value }))}>
+              {['GBP','EUR','USD'].map(c => <option key={c}>{c}</option>)}
+            </select>
+          </div>
+          <select className="w-full border rounded px-2 py-1 text-sm bg-background" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
+            {['outstanding','paid','overdue'].map(s => <option key={s}>{s}</option>)}
+          </select>
+          <input type="date" className="w-full border rounded px-2 py-1 text-sm bg-background" value={form.dueDate} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} />
+          <textarea placeholder="Notes" className="w-full border rounded px-2 py-1 text-sm bg-background" rows={2} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+          <input type="file" accept=".pdf,.doc,.docx" onChange={e => setFile(e.target.files?.[0] ?? null)} className="text-sm" />
+          <div className="flex gap-2">
+            <button type="submit" className="text-sm px-3 py-1.5 rounded bg-primary text-primary-foreground">Add</button>
+            <button type="button" onClick={() => setShowForm(false)} className="text-sm px-3 py-1.5 rounded border">Cancel</button>
+          </div>
+        </form>
+      )}
+      <ul className="space-y-2">
+        {invoices.map(inv => (
+          <li key={inv.id} className="border rounded p-3 flex items-center justify-between gap-2">
+            <div>
+              <p className="font-medium text-sm">{inv.currency} {inv.amount}</p>
+              <p className="text-xs text-muted-foreground">{inv.invoiceDate ? formatDate(inv.invoiceDate as string) : '—'}{inv.dueDate ? ` · Due ${formatDate(inv.dueDate as string)}` : ''}</p>
+              <span className={cn('text-xs px-1.5 py-0.5 rounded font-semibold', invoiceStatusCls(inv.status))}>{inv.status}</span>
+            </div>
+            <div className="flex gap-2">
+              {inv.fileObjectName && (
+                <a href={`/api/admin/invoices/${inv.id}/download`} className="text-xs px-2 py-1 border rounded hover:bg-muted">Download</a>
+              )}
+              <button onClick={() => del.mutate(inv.id)} className="text-xs text-muted-foreground hover:text-destructive">✕</button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// ── CRM: ClientHistory ─────────────────────────────────────────────────────────
+
+function ClientHistory({ clientId }: { clientId: number }) {
+  const qc = useQueryClient();
+  const { data: history = [] } = useQuery<ClientContactHistory[]>({ queryKey: [`/api/admin/clients/${clientId}/history`] });
+  const [note, setNote] = useState('');
+
+  const add = useMutation({
+    mutationFn: () => apiRequest('POST', `/api/admin/clients/${clientId}/history`, { note }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: [`/api/admin/clients/${clientId}/history`] }); setNote(''); },
+  });
+
+  const del = useMutation({
+    mutationFn: (id: number) => apiRequest('DELETE', `/api/admin/history/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [`/api/admin/clients/${clientId}/history`] }),
+  });
+
+  return (
+    <div className="space-y-3">
+      <form onSubmit={e => { e.preventDefault(); if (note.trim()) add.mutate(); }} className="flex gap-2">
+        <textarea required placeholder="Log a contact note…" className="flex-1 border rounded px-2 py-1 text-sm bg-background" rows={2} value={note} onChange={e => setNote(e.target.value)} />
+        <button type="submit" className="text-sm px-3 py-1.5 rounded bg-primary text-primary-foreground self-end">Add</button>
+      </form>
+      <ul className="space-y-2">
+        {history.map(h => (
+          <li key={h.id} className="border rounded p-2 flex justify-between gap-2">
+            <div>
+              <p className="text-sm">{h.note}</p>
+              <p className="text-xs text-muted-foreground">{timeAgo(h.createdAt as string)}</p>
+            </div>
+            <button onClick={() => del.mutate(h.id)} className="text-xs text-muted-foreground hover:text-destructive self-start">✕</button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// ── CRM: ClientFiles ───────────────────────────────────────────────────────────
+
+function ClientFiles({ clientId }: { clientId: number }) {
+  const qc = useQueryClient();
+  const { data: files = [] } = useQuery<ClientFile[]>({ queryKey: [`/api/admin/clients/${clientId}/files`] });
+  const [file, setFile] = useState<File | null>(null);
+  const [label, setLabel] = useState('');
+
+  const upload = useMutation({
+    mutationFn: async () => {
+      if (!file) throw new Error('No file');
+      const content = await readFileAsBase64(file);
+      return apiRequest('POST', `/api/admin/clients/${clientId}/files`, { content, filename: file.name, contentType: file.type || 'application/octet-stream', label });
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: [`/api/admin/clients/${clientId}/files`] }); setFile(null); setLabel(''); },
+  });
+
+  const del = useMutation({
+    mutationFn: (id: number) => apiRequest('DELETE', `/api/admin/files/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [`/api/admin/clients/${clientId}/files`] }),
+  });
+
+  return (
+    <div className="space-y-3">
+      <form onSubmit={e => { e.preventDefault(); upload.mutate(); }} className="flex flex-wrap gap-2 items-end">
+        <input type="file" onChange={e => setFile(e.target.files?.[0] ?? null)} className="text-sm" />
+        <input placeholder="Label (optional)" className="border rounded px-2 py-1 text-sm bg-background" value={label} onChange={e => setLabel(e.target.value)} />
+        <button type="submit" disabled={!file} className="text-sm px-3 py-1.5 rounded bg-primary text-primary-foreground disabled:opacity-50">Upload</button>
+      </form>
+      <ul className="space-y-2">
+        {files.map(f => (
+          <li key={f.id} className="border rounded p-2 flex justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium">{f.label ?? f.filename}</p>
+              <p className="text-xs text-muted-foreground">{f.filename} · {timeAgo(f.createdAt as string)}</p>
+            </div>
+            <div className="flex gap-2">
+              <a href={`/api/admin/files/${f.id}/download`} className="text-xs px-2 py-1 border rounded hover:bg-muted">Download</a>
+              <button onClick={() => del.mutate(f.id)} className="text-xs text-muted-foreground hover:text-destructive">✕</button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// ── CRM: ClientDetail ──────────────────────────────────────────────────────────
+
+type ClientSubTab = 'overview' | 'tasks' | 'invoices' | 'history' | 'files';
+
+function ClientDetail({ clientId, onBack }: { clientId: number; onBack: () => void }) {
+  const qc = useQueryClient();
+  const { data: client } = useQuery<Client>({ queryKey: [`/api/admin/clients/${clientId}`] });
+  const [subTab, setSubTab] = useState<ClientSubTab>('overview');
+
+  if (!client) return <div className="p-6 text-muted-foreground">Loading…</div>;
+
+  const SUB_TABS: { id: ClientSubTab; label: string }[] = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'tasks', label: 'Tasks' },
+    { id: 'invoices', label: 'Invoices' },
+    { id: 'history', label: 'History' },
+    { id: 'files', label: 'Files' },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <button onClick={onBack} className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1">← Back to clients</button>
+      <div className="flex items-center gap-3">
+        {client.profilePhotoUrl
+          ? <img src={client.profilePhotoUrl} alt="" className="w-12 h-12 rounded-full object-cover" />
+          : <Initials name={client.companyName} />}
+        <div>
+          <h2 className="font-semibold text-lg">{client.companyName}</h2>
+          <p className="text-sm text-muted-foreground">{client.primaryContactName}</p>
+        </div>
+      </div>
+      <div className="flex gap-1 border-b">
+        {SUB_TABS.map(t => (
+          <button key={t.id} onClick={() => setSubTab(t.id)} className={cn('px-3 py-2 text-sm font-medium transition-colors', subTab === t.id ? 'border-b-2 border-primary text-foreground' : 'text-muted-foreground hover:text-foreground')}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {subTab === 'overview' && <ClientOverview client={client} onUpdated={() => qc.invalidateQueries({ queryKey: [`/api/admin/clients/${clientId}`] })} />}
+      {subTab === 'tasks' && <ClientTasks clientId={clientId} />}
+      {subTab === 'invoices' && <ClientInvoices clientId={clientId} />}
+      {subTab === 'history' && <ClientHistory clientId={clientId} />}
+      {subTab === 'files' && <ClientFiles clientId={clientId} />}
+    </div>
+  );
+}
+
+// ── CRM: ClientsTab ────────────────────────────────────────────────────────────
+
+function ClientsTab() {
+  const qc = useQueryClient();
+  const { data: clients = [] } = useQuery<Client[]>({ queryKey: ['/api/admin/clients'] });
+  const [selected, setSelected] = useState<number | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ companyName: '', primaryContactName: '', email: '', phone: '', serviceType: 'General' });
+
+  const add = useMutation({
+    mutationFn: () => apiRequest('POST', '/api/admin/clients', form),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['/api/admin/clients'] }); setShowForm(false); setForm({ companyName: '', primaryContactName: '', email: '', phone: '', serviceType: 'General' }); },
+  });
+
+  const del = useMutation({
+    mutationFn: (id: number) => apiRequest('DELETE', `/api/admin/clients/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['/api/admin/clients'] }),
+  });
+
+  if (selected !== null) return <ClientDetail clientId={selected} onBack={() => setSelected(null)} />;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h2 className="font-semibold">Clients</h2>
+        <button onClick={() => setShowForm(s => !s)} className="text-sm px-3 py-1.5 rounded bg-primary text-primary-foreground">+ Add client</button>
+      </div>
+      {showForm && (
+        <form onSubmit={e => { e.preventDefault(); add.mutate(); }} className="border rounded p-4 space-y-3">
+          {([['companyName','Company name'],['primaryContactName','Contact name'],['email','Email'],['phone','Phone'],['serviceType','Service type']] as [string,string][]).map(([k,l]) => (
+            <div key={k}>
+              <label className="text-xs text-muted-foreground block mb-1">{l}</label>
+              <input className="w-full border rounded px-2 py-1 text-sm bg-background" value={(form as Record<string,string>)[k]} onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))} required={['companyName','primaryContactName','email'].includes(k)} />
+            </div>
+          ))}
+          <div className="flex gap-2">
+            <button type="submit" className="text-sm px-3 py-1.5 rounded bg-primary text-primary-foreground">Add</button>
+            <button type="button" onClick={() => setShowForm(false)} className="text-sm px-3 py-1.5 rounded border">Cancel</button>
+          </div>
+        </form>
+      )}
+      <ul className="space-y-2">
+        {clients.map(c => (
+          <li key={c.id} className="border rounded p-3 flex items-center gap-3 cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => setSelected(c.id)}>
+            {c.profilePhotoUrl
+              ? <img src={c.profilePhotoUrl} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+              : <Initials name={c.companyName} />}
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-sm truncate">{c.companyName}</p>
+              <p className="text-xs text-muted-foreground truncate">{c.primaryContactName} · {c.serviceType}</p>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <span className={cn('text-xs px-1.5 py-0.5 rounded font-semibold', invoiceStatusCls(c.invoiceStatus))}>{c.invoiceStatus}</span>
+              <button onClick={e => { e.stopPropagation(); if (confirm('Delete client?')) del.mutate(c.id); }} className="text-xs text-muted-foreground hover:text-destructive">✕</button>
+            </div>
+          </li>
+        ))}
+        {clients.length === 0 && <p className="text-sm text-muted-foreground">No clients yet.</p>}
+      </ul>
+    </div>
+  );
+}
+
+// ── CRM: TasksTab ──────────────────────────────────────────────────────────────
+
+function TasksTab() {
+  const qc = useQueryClient();
+  const { data: tasks = [] } = useQuery<ClientTask[]>({ queryKey: ['/api/admin/tasks'] });
+  const { data: allClients = [] } = useQuery<Client[]>({ queryKey: ['/api/admin/clients'] });
+  const clientMap = Object.fromEntries(allClients.map(c => [c.id, c.companyName]));
+  const [showDone, setShowDone] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ title: '', description: '', priority: 3, clientId: '', dueDate: '' });
+
+  const open = tasks.filter(t => t.status !== 'done');
+  const done = tasks.filter(t => t.status === 'done');
+  const grouped = [1,2,3,4,5].map(p => ({ p, items: open.filter(t => t.priority === p) })).filter(g => g.items.length > 0);
+
+  const add = useMutation({
+    mutationFn: () => apiRequest('POST', '/api/admin/tasks', { ...form, priority: Number(form.priority), clientId: form.clientId ? Number(form.clientId) : null }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['/api/admin/tasks'] }); setShowForm(false); setForm({ title: '', description: '', priority: 3, clientId: '', dueDate: '' }); },
+  });
+
+  const toggle = useMutation({
+    mutationFn: (t: ClientTask) => apiRequest('PATCH', `/api/admin/tasks/${t.id}`, { status: t.status === 'open' ? 'done' : 'open' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['/api/admin/tasks'] }),
+  });
+
+  const del = useMutation({
+    mutationFn: (id: number) => apiRequest('DELETE', `/api/admin/tasks/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['/api/admin/tasks'] }),
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h2 className="font-semibold">All Tasks</h2>
+        <button onClick={() => setShowForm(s => !s)} className="text-sm px-3 py-1.5 rounded bg-primary text-primary-foreground">+ Add task</button>
+      </div>
+      {showForm && (
+        <form onSubmit={e => { e.preventDefault(); add.mutate(); }} className="border rounded p-4 space-y-3">
+          <input required placeholder="Task title" className="w-full border rounded px-2 py-1 text-sm bg-background" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
+          <textarea placeholder="Description" className="w-full border rounded px-2 py-1 text-sm bg-background" rows={2} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+          <div className="flex gap-2">
+            <select className="border rounded px-2 py-1 text-sm bg-background" value={form.priority} onChange={e => setForm(f => ({ ...f, priority: Number(e.target.value) }))}>
+              {[1,2,3,4,5].map(p => <option key={p} value={p}>P{p}</option>)}
+            </select>
+            <select className="flex-1 border rounded px-2 py-1 text-sm bg-background" value={form.clientId} onChange={e => setForm(f => ({ ...f, clientId: e.target.value }))}>
+              <option value="">No client</option>
+              {allClients.map(c => <option key={c.id} value={c.id}>{c.companyName}</option>)}
+            </select>
+            <input type="date" className="border rounded px-2 py-1 text-sm bg-background" value={form.dueDate} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} />
+          </div>
+          <div className="flex gap-2">
+            <button type="submit" className="text-sm px-3 py-1.5 rounded bg-primary text-primary-foreground">Add</button>
+            <button type="button" onClick={() => setShowForm(false)} className="text-sm px-3 py-1.5 rounded border">Cancel</button>
+          </div>
+        </form>
+      )}
+      {grouped.map(({ p, items }) => (
+        <div key={p}>
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase mb-2 flex items-center gap-2"><PriorityBadge p={p} /> Priority {p}</h3>
+          <ul className="space-y-2">
+            {items.map(t => (
+              <li key={t.id} className="border rounded p-2 flex items-start gap-2">
+                <input type="checkbox" checked={false} onChange={() => toggle.mutate(t)} className="mt-1" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">{t.title}</p>
+                  {t.clientId && <p className="text-xs text-muted-foreground">{clientMap[t.clientId] ?? 'Unknown client'}</p>}
+                  {t.dueDate && <p className="text-xs text-muted-foreground">Due {formatDate(t.dueDate as string)}</p>}
+                </div>
+                <button onClick={() => del.mutate(t.id)} className="text-xs text-muted-foreground hover:text-destructive">✕</button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+      {done.length > 0 && (
+        <div>
+          <button onClick={() => setShowDone(s => !s)} className="text-xs text-muted-foreground mb-2">
+            {showDone ? '▼' : '▶'} Done ({done.length})
+          </button>
+          {showDone && (
+            <ul className="space-y-2">
+              {done.map(t => (
+                <li key={t.id} className="border rounded p-2 flex items-start gap-2 opacity-60">
+                  <input type="checkbox" checked={true} onChange={() => toggle.mutate(t)} className="mt-1" />
+                  <span className="text-sm line-through">{t.title}</span>
+                  <button onClick={() => del.mutate(t.id)} className="ml-auto text-xs text-muted-foreground hover:text-destructive">✕</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+      {tasks.length === 0 && <p className="text-sm text-muted-foreground">No tasks yet.</p>}
+    </div>
+  );
+}
+
 // ── Main Admin shell ──────────────────────────────────────────────────────────
 
 export default function Admin() {
@@ -3233,6 +3779,8 @@ export default function Admin() {
         <Tabs defaultValue="enquiries">
           <TabsList>
             <TabsTrigger value="enquiries">Enquiries</TabsTrigger>
+            <TabsTrigger value="clients">Clients</TabsTrigger>
+            <TabsTrigger value="tasks">Tasks</TabsTrigger>
             <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
             <TabsTrigger value="blog">Blog</TabsTrigger>
             <TabsTrigger value="gallery">Gallery</TabsTrigger>
@@ -3242,6 +3790,12 @@ export default function Admin() {
           </TabsList>
           <TabsContent value="enquiries">
             <EnquiriesTab />
+          </TabsContent>
+          <TabsContent value="clients">
+            <ClientsTab />
+          </TabsContent>
+          <TabsContent value="tasks">
+            <TasksTab />
           </TabsContent>
           <TabsContent value="portfolio">
             <PortfolioTab />

@@ -20,7 +20,7 @@ const INTRO =
 
 class ChatErrorBoundary extends Error {}
 
-export function ChatInterface() {
+export function ChatInterface({ onActivity }: { onActivity?: () => void }) {
   const [messages, setMessages] = useState<Message[]>([{ role: 'assistant', content: '' }]);
   const [isInitialTyping, setIsInitialTyping] = useState(true);
   const [input, setInput] = useState('');
@@ -72,6 +72,7 @@ export function ChatInterface() {
 
     setInput('');
     setError(null);
+    onActivity?.();
     // Keep focus so keyboard never closes on mobile
     inputRef.current?.focus();
 
@@ -147,6 +148,7 @@ export function ChatInterface() {
                 return updated;
               });
             } else if (parsed.token !== undefined) {
+              onActivity?.();
               setMessages(prev => {
                 const updated = [...prev];
                 const last = updated[updated.length - 1];
@@ -273,7 +275,7 @@ export function ChatInterface() {
         <textarea
           ref={inputRef}
           value={input}
-          onChange={e => setInput(e.target.value)}
+          onChange={e => { setInput(e.target.value); onActivity?.(); }}
           onKeyDown={handleKeyDown}
           placeholder={isInitialTyping ? '' : isStreaming ? 'Zak\'s assistant is typing…' : 'Type your message…'}
           rows={1}

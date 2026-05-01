@@ -1,7 +1,7 @@
 import { db, pool } from './db';
-import { inquiries, projects, posts, adminUsers, knowledgeBase, galleryImages, projectSections, postSections, errorLogs } from '../shared/schema';
+import { inquiries, projects, posts, adminUsers, knowledgeBase, galleryImages, projectSections, postSections, errorLogs, clients, clientContactHistory, clientTasks, clientInvoices, clientFiles } from '../shared/schema';
 import { eq, desc, asc, lt } from 'drizzle-orm';
-import type { InsertInquiry, InsertProject, InsertPost, Inquiry, Project, Post, KnowledgeBaseEntry, InsertKnowledgeBaseEntry, GalleryImage, InsertGalleryImage, ProjectSection, InsertProjectSection, PostSection, InsertPostSection, ErrorLog } from '../shared/schema';
+import type { InsertInquiry, InsertProject, InsertPost, Inquiry, Project, Post, KnowledgeBaseEntry, InsertKnowledgeBaseEntry, GalleryImage, InsertGalleryImage, ProjectSection, InsertProjectSection, PostSection, InsertPostSection, ErrorLog, Client, InsertClient, ClientContactHistory, InsertClientContactHistory, ClientTask, InsertClientTask, ClientInvoice, InsertClientInvoice, ClientFile, InsertClientFile } from '../shared/schema';
 
 // ── Enquiries ─────────────────────────────────────────────────────────────────
 
@@ -267,4 +267,129 @@ export async function purgeOldErrorLogs(): Promise<number> {
     .where(lt(errorLogs.createdAt, sevenDaysAgo))
     .returning();
   return deleted.length;
+}
+
+// ── Clients ───────────────────────────────────────────────────────────────────
+
+export async function getAllClients(): Promise<Client[]> {
+  return db.select().from(clients).orderBy(desc(clients.createdAt));
+}
+
+export async function getClientById(id: number): Promise<Client | undefined> {
+  const [client] = await db.select().from(clients).where(eq(clients.id, id));
+  return client;
+}
+
+export async function createClient(data: InsertClient): Promise<Client> {
+  const [client] = await db.insert(clients).values(data).returning();
+  return client;
+}
+
+export async function updateClient(id: number, data: Partial<InsertClient>): Promise<Client> {
+  const [client] = await db.update(clients).set(data).where(eq(clients.id, id)).returning();
+  return client;
+}
+
+export async function deleteClient(id: number): Promise<void> {
+  await db.delete(clients).where(eq(clients.id, id));
+}
+
+export async function promoteInquiryToClient(inquiryId: number): Promise<Client> {
+  const inquiry = await getInquiryById(inquiryId);
+  if (!inquiry) throw new Error('Inquiry not found');
+  const contactName = `${inquiry.firstName} ${inquiry.lastName}`.trim();
+  const [client] = await db.insert(clients).values({
+    companyName: contactName,
+    primaryContactName: contactName,
+    email: inquiry.email,
+    phone: inquiry.phone ?? undefined,
+    fromInquiryId: inquiryId,
+  }).returning();
+  await updateInquiryStatus(inquiryId, 'converted');
+  return client;
+}
+
+// ── Client contact history ────────────────────────────────────────────────────
+
+export async function getContactHistoryByClientId(clientId: number): Promise<ClientContactHistory[]> {
+  return db.select().from(clientContactHistory)
+    .where(eq(clientContactHistory.clientId, clientId))
+    .orderBy(desc(clientContactHistory.createdAt));
+}
+
+export async function addContactHistoryEntry(clientId: number, note: string): Promise<ClientContactHistory> {
+  const [entry] = await db.insert(clientContactHistory).values({ clientId, note }).returning();
+  return entry;
+}
+
+export async function deleteContactHistoryEntry(id: number): Promise<void> {
+  await db.delete(clientContactHistory).where(eq(clientContactHistory.id, id));
+}
+
+// ── Client tasks ──────────────────────────────────────────────────────────────
+
+export async function getAllClientTasks(): Promise<ClientTask[]> {
+  return db.select().from(clientTasks)
+    .orderBy(asc(clientTasks.priority), asc(clientTasks.createdAt));
+}
+
+export async function getTasksByClientId(clientId: number): Promise<ClientTask[]> {
+  return db.select().from(clientTasks)
+    .where(eq(clientTasks.clientId, clientId))
+    .orderBy(asc(clientTasks.priority), asc(clientTasks.createdAt));
+}
+
+export async function createClientTask(data: InsertClientTask): Promise<ClientTask> {
+  const [task] = await db.insert(clientTasks).values(data).returning();
+  return task;
+}
+
+export async function updateClientTask(id: number, data: Partial<InsertClientTask>): Promise<ClientTask> {
+  const [task] = await db.update(clientTasks).set(data).where(eq(clientTasks.id, id)).returning();
+  return task;
+}
+
+export async function deleteClientTask(id: number): Promise<void> {
+  await db.delete(clientTasks).where(eq(clientTasks.id, id));
+}
+
+// ── Client invoices ───────────────────────────────────────────────────────────
+
+export async function getInvoicesByClientId(clientId: number): Promise<ClientInvoice[]> {
+  return db.select().from(clientInvoices)
+    .where(eq(clientInvoices.clientId, clientId))
+    .orderBy(desc(clientInvoices.invoiceDate));
+}
+
+export async function createClientInvoice(data: InsertClientInvoice): Promise<ClientInvoice> {
+  const [invoice] = await db.insert(clientInvoices).values(data).returning();
+  return invoice;
+}
+
+export async function updateClientInvoice(id: number, data: Partial<InsertClientInvoice>): Promise<ClientInvoice> {
+  const [invoice] = await db.update(clientInvoices).set(data).where(eq(clientInvoices.id, id)).returning();
+  return invoice;
+}
+
+export async function deleteClientInvoice(id: number): Promise<ClientInvoice> {
+  const [invoice] = await db.delete(clientInvoices).where(eq(clientInvoices.id, id)).returning();
+  return invoice;
+}
+
+// ── Client files ──────────────────────────────────────────────────────────────
+
+export async function getFilesByClientId(clientId: number): Promise<ClientFile[]> {
+  return db.select().from(clientFiles)
+    .where(eq(clientFiles.clientId, clientId))
+    .orderBy(desc(clientFiles.createdAt));
+}
+
+export async function createClientFile(data: InsertClientFile): Promise<ClientFile> {
+  const [file] = await db.insert(clientFiles).values(data).returning();
+  return file;
+}
+
+export async function deleteClientFile(id: number): Promise<ClientFile> {
+  const [file] = await db.delete(clientFiles).where(eq(clientFiles.id, id)).returning();
+  return file;
 }

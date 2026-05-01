@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X } from 'lucide-react';
@@ -20,8 +20,16 @@ const NAV_LINKS = [
 export default function Home() {
   const [typedChars, setTypedChars] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [chatActive, setChatActive] = useState(false);
   const [, navigate] = useLocation();
   const headingDone = typedChars >= HEADING.length;
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleActivity = useCallback(() => {
+    setChatActive(true);
+    if (idleTimer.current) clearTimeout(idleTimer.current);
+    idleTimer.current = setTimeout(() => setChatActive(false), 3000);
+  }, []);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
@@ -49,7 +57,7 @@ export default function Home() {
 
   return (
     <div className="h-[100dvh] flex flex-col bg-background relative overflow-hidden">
-      <NetworkBackground />
+      <NetworkBackground active={chatActive} />
 
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-6 py-4">
@@ -171,7 +179,7 @@ export default function Home() {
                 transition={{ duration: 0.4 }}
                 className="flex-1 min-h-0 flex flex-col"
               >
-                <ChatInterface />
+                <ChatInterface onActivity={handleActivity} />
               </motion.div>
             )}
           </AnimatePresence>

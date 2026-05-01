@@ -121,6 +121,77 @@ export const errorLogs = pgTable('error_logs', {
 });
 export type ErrorLog = typeof errorLogs.$inferSelect;
 
+// CRM — Clients
+export const clients = pgTable('clients', {
+  id: serial('id').primaryKey(),
+  companyName: text('company_name').notNull(),
+  primaryContactName: text('primary_contact_name').notNull(),
+  email: text('email').notNull(),
+  phone: text('phone'),
+  serviceType: text('service_type').notNull().default('General'),
+  status: text('status').notNull().default('active'),
+  contractStart: timestamp('contract_start'),
+  contractEnd: timestamp('contract_end'),
+  profilePhotoUrl: text('profile_photo_url'),
+  invoiceStatus: text('invoice_status').notNull().default('paid'),
+  notes: text('notes'),
+  fromInquiryId: integer('from_inquiry_id'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const clientContactHistory = pgTable('client_contact_history', {
+  id: serial('id').primaryKey(),
+  clientId: integer('client_id').notNull(),
+  note: text('note').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const clientTasks = pgTable('client_tasks', {
+  id: serial('id').primaryKey(),
+  clientId: integer('client_id'),
+  title: text('title').notNull(),
+  description: text('description'),
+  priority: integer('priority').notNull().default(3),
+  status: text('status').notNull().default('open'),
+  dueDate: timestamp('due_date'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const clientInvoices = pgTable('client_invoices', {
+  id: serial('id').primaryKey(),
+  clientId: integer('client_id').notNull(),
+  amount: text('amount').notNull(),
+  currency: text('currency').notNull().default('GBP'),
+  status: text('status').notNull().default('outstanding'),
+  invoiceDate: timestamp('invoice_date').defaultNow(),
+  dueDate: timestamp('due_date'),
+  fileObjectName: text('file_object_name'),
+  fileFilename: text('file_filename'),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const clientFiles = pgTable('client_files', {
+  id: serial('id').primaryKey(),
+  clientId: integer('client_id').notNull(),
+  filename: text('filename').notNull(),
+  objectName: text('object_name').notNull(),
+  contentType: text('content_type').notNull().default('application/pdf'),
+  label: text('label'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export type Client = typeof clients.$inferSelect;
+export type InsertClient = typeof clients.$inferInsert;
+export type ClientContactHistory = typeof clientContactHistory.$inferSelect;
+export type InsertClientContactHistory = typeof clientContactHistory.$inferInsert;
+export type ClientTask = typeof clientTasks.$inferSelect;
+export type InsertClientTask = typeof clientTasks.$inferInsert;
+export type ClientInvoice = typeof clientInvoices.$inferSelect;
+export type InsertClientInvoice = typeof clientInvoices.$inferInsert;
+export type ClientFile = typeof clientFiles.$inferSelect;
+export type InsertClientFile = typeof clientFiles.$inferInsert;
+
 // Zod schemas
 export const insertKnowledgeBaseSchema = createInsertSchema(knowledgeBase);
 export const selectKnowledgeBaseSchema = createSelectSchema(knowledgeBase);
