@@ -1,172 +1,38 @@
-import { useEffect, useRef } from 'react';
-import { feature } from 'topojson-client';
-import type { Topology, Objects } from 'topojson-specification';
-import { useTheme } from '@/context/ThemeContext';
+import { useRef, useEffect } from 'react';
 
-type Point = { x: number; y: number };
-
-// ISO 3166-1 numeric codes for European countries
-const EU_IDS = new Set([
-  8,   // Albania
-  20,  // Andorra
-  40,  // Austria
-  56,  // Belgium
-  70,  // Bosnia
-  100, // Bulgaria
-  112, // Belarus
-  191, // Croatia
-  196, // Cyprus
-  203, // Czech Republic
-  208, // Denmark
-  233, // Estonia
-  246, // Finland
-  250, // France
-  276, // Germany
-  300, // Greece
-  348, // Hungary
-  352, // Iceland
-  372, // Ireland
-  380, // Italy
-  428, // Latvia
-  438, // Liechtenstein
-  440, // Lithuania
-  442, // Luxembourg
-  470, // Malta
-  492, // Monaco
-  498, // Moldova
-  499, // Montenegro
-  528, // Netherlands
-  578, // Norway
-  616, // Poland
-  620, // Portugal
-  642, // Romania
-  643, // Russia (western portion clips naturally)
-  674, // San Marino
-  688, // Serbia
-  703, // Slovakia
-  705, // Slovenia
-  724, // Spain
-  752, // Sweden
-  756, // Switzerland
-  792, // Turkey (western portion)
-  804, // Ukraine
-  807, // North Macedonia
-  826, // United Kingdom
-]);
-
-// European cities for network overlay — Birmingham is hub (SSM-LTD HQ)
-const CITIES = [
-  { name: 'Birmingham', lat: 52.48, lon: -1.90, hub: true },
-  { name: 'Paris',     lat: 48.85, lon:  2.35           },
-  { name: 'Berlin',    lat: 52.52, lon: 13.41           },
-  { name: 'Madrid',    lat: 40.42, lon: -3.70           },
-  { name: 'Rome',      lat: 41.90, lon: 12.50           },
-  { name: 'Amsterdam', lat: 52.37, lon:  4.90           },
-  { name: 'Warsaw',    lat: 52.23, lon: 21.01           },
-  { name: 'Vienna',    lat: 48.21, lon: 16.37           },
-  { name: 'Stockholm', lat: 59.33, lon: 18.07           },
-  { name: 'Lisbon',    lat: 38.72, lon: -9.14           },
-  { name: 'Dublin',    lat: 53.33, lon: -6.25           },
-];
-
-// Geographic bounds used for scale calculation
-const LON_MIN = -14, LON_MAX = 42;
-const LAT_MIN =  34, LAT_MAX = 67;
-
-// Viewport centre — shifted west from the bounding-box midpoint so that
-// Western Europe (UK, France, Germany) is centred on both desktop and mobile
-const CENTER_LON = 2;   // degrees
-
-function mercY(lat: number) {
-  return Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
+interface NetNode {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
 }
 
-const MX_MIN = (LON_MIN * Math.PI) / 180;
-const MX_MAX = (LON_MAX * Math.PI) / 180;
-const MY_MIN = mercY(LAT_MIN);
-const MY_MAX = mercY(LAT_MAX);
+const NODE_COUNT = 52;
+const BASE_SPEED = 0.35;
+const ACTIVE_SPEED = 1.1;
+const BASE_DIST = 130;
+const ACTIVE_DIST = 195;
+const LERP = 0.038;
 
-function project(lon: number, lat: number, W: number, H: number, pad = 0.04): Point {
-  const mx = (lon * Math.PI) / 180;
-  const my = mercY(lat);
-
-  const usableW = W * (1 - 2 * pad);
-  const usableH = H * (1 - 2 * pad);
-
-  const scaleX = usableW / (MX_MAX - MX_MIN);
-  const scaleY = usableH / (MY_MAX - MY_MIN);
-  // Portrait (mobile): cover — fill height so there are no empty letterbox bands.
-  // Landscape (desktop): fit — show the whole continent without overflow.
-  const scale  = W < H ? Math.max(scaleX, scaleY) : Math.min(scaleX, scaleY);
-
-  const mxCen = (CENTER_LON * Math.PI) / 180;
-  const myCen = (MY_MIN + MY_MAX) / 2;
-
-  return {
-    x:  (mx - mxCen) * scale + W / 2,
-    y: -(my - myCen) * scale + H / 2,
-  };
+// Resolve --primary CSS var to [r, g, b] via an off-screen canvas
+function resolvePrimary(): [number, number, number] {
+  const hsl = `hsl(${getComputedStyle(document.documentElement).getPropertyValue('--primary').trim()})`;
+  const cvs = document.createElement('canvas');
+  cvs.width = cvs.height = 1;
+  const c = cvs.getContext('2d')!;
+  c.fillStyle = hsl;
+  c.fillRect(0, 0, 1, 1);
+  const d = c.getImageData(0, 0, 1, 1).data;
+  return [d[0], d[1], d[2]];
 }
 
-function drawGeometry(
-  ctx: CanvasRenderingContext2D,
-  geometry: GeoJSON.Geometry,
-  W: number,
-  H: number,
-) {
-  function ring(coords: number[][]) {
-    coords.forEach(([lon, lat], i) => {
-      const { x, y } = project(lon, lat, W, H);
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.closePath();
-  }
-
-  if (geometry.type === 'Polygon') {
-    geometry.coordinates.forEach(ring);
-  } else if (geometry.type === 'MultiPolygon') {
-    geometry.coordinates.forEach(poly => poly.forEach(ring));
-  }
-}
-
-function bezier(t: number, p0: Point, p1: Point, p2: Point): Point {
-  const u = 1 - t;
-  return {
-    x: u * u * p0.x + 2 * u * t * p1.x + t * t * p2.x,
-    y: u * u * p0.y + 2 * u * t * p1.y + t * t * p2.y,
-  };
-}
-
-function ctrlPt(a: Point, b: Point): Point {
-  const dist = Math.hypot(b.x - a.x, b.y - a.y);
-  return {
-    x: (a.x + b.x) / 2,
-    y: (a.y + b.y) / 2 - dist * 0.22,
-  };
-}
-
-export function NetworkBackground() {
+export function NetworkBackground({ active = false }: { active?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { theme } = useTheme();
-  const rafRef    = useRef<number>(0);
-  const geoRef    = useRef<GeoJSON.Feature[]>([]);
+  const activeRef = useRef(active);
 
-  // Fetch and decode world-atlas topojson once
   useEffect(() => {
-    (async () => {
-      try {
-        const topo = await fetch(
-          'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'
-        ).then(r => r.json()) as Topology<Objects>;
-
-        const collection = feature(topo, topo.objects.countries) as GeoJSON.FeatureCollection;
-        geoRef.current   = collection.features.filter(f => EU_IDS.has(Number(f.id)));
-      } catch (e) {
-        console.warn('Map data unavailable:', e);
-      }
-    })();
-  }, []);
+    activeRef.current = active;
+  }, [active]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -174,141 +40,100 @@ export function NetworkBackground() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const isDark = theme === 'dark';
-    const [h, s, l] = isDark ? [185, 100, 50] : [185, 100, 38];
-    const p = (a: number) => `hsla(${h},${s}%,${l}%,${a})`;
+    let nodes: NetNode[] = [];
+    let rafId: number;
+    let level = 0;
+    let color: [number, number, number] = [0, 178, 194];
+    let lastTheme = '';
 
-    const landFill   = isDark ? 'rgba(255,255,255,0.022)' : 'rgba(0,0,0,0.025)';
-    const borderColor = isDark ? 'rgba(255,255,255,0.13)'  : 'rgba(0,0,0,0.16)';
-    const arcColor   = isDark ? 'rgba(255,255,255,0.09)'  : 'rgba(0,0,0,0.08)';
-
-    const dpr = window.devicePixelRatio || 1;
+    function init() {
+      nodes = Array.from({ length: NODE_COUNT }, () => {
+        const a = Math.random() * Math.PI * 2;
+        const s = BASE_SPEED * (0.5 + Math.random() * 0.8);
+        return {
+          x: Math.random() * canvas!.width,
+          y: Math.random() * canvas!.height,
+          vx: Math.cos(a) * s,
+          vy: Math.sin(a) * s,
+        };
+      });
+    }
 
     function resize() {
-      if (!canvas) return;
-      const W = canvas.offsetWidth;
-      const H = canvas.offsetHeight;
-      canvas.width  = W * dpr;
-      canvas.height = H * dpr;
-      ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
+      canvas!.width = window.innerWidth;
+      canvas!.height = window.innerHeight;
+      init();
     }
-    resize();
-    const ro = new ResizeObserver(resize);
-    ro.observe(canvas);
 
-    const londonIdx = CITIES.findIndex(c => c.hub);
-    const packets = CITIES
-      .map((_, i) =>
-        CITIES[i].hub
-          ? null
-          : { i, t: Math.random(), speed: 0.0012 + Math.random() * 0.0009, fwd: Math.random() < 0.5 }
-      )
-      .filter(Boolean) as { i: number; t: number; speed: number; fwd: boolean }[];
+    function frame() {
+      const w = canvas!.width;
+      const h = canvas!.height;
 
-    function draw() {
-      if (!ctx || !canvas) return;
-      const W = canvas.offsetWidth;
-      const H = canvas.offsetHeight;
-      ctx.clearRect(0, 0, W, H);
+      const theme = document.documentElement.getAttribute('data-theme') || 'light';
+      if (theme !== lastTheme) {
+        lastTheme = theme;
+        color = resolvePrimary();
+      }
 
-      const CLIP_TOP = 120;
-      const CLIP_BOT = 50;
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(0, CLIP_TOP, W, H - CLIP_TOP - CLIP_BOT);
-      ctx.clip();
-      geoRef.current.forEach(f => {
-        if (!f.geometry) return;
-        ctx.beginPath();
-        drawGeometry(ctx, f.geometry, W, H);
-        ctx.fillStyle   = landFill;
-        ctx.fill();
-        ctx.strokeStyle = borderColor;
-        ctx.lineWidth   = 0.6;
-        ctx.stroke();
-      });
-      ctx.restore();
+      level += ((activeRef.current ? 1 : 0) - level) * LERP;
 
-      // City positions
-      const pts    = CITIES.map(c => project(c.lon, c.lat, W, H));
-      const london = pts[londonIdx];
+      const speed = 1 + level * (ACTIVE_SPEED / BASE_SPEED - 1);
+      const maxDist = BASE_DIST + level * (ACTIVE_DIST - BASE_DIST);
+      const [r, g, b] = color;
 
-      // Connection arcs from London
-      pts.forEach((pt, i) => {
-        if (i === londonIdx) return;
-        const cp = ctrlPt(london, pt);
-        ctx.beginPath();
-        ctx.moveTo(london.x, london.y);
-        ctx.quadraticCurveTo(cp.x, cp.y, pt.x, pt.y);
-        ctx.strokeStyle = arcColor;
-        ctx.lineWidth   = 0.9;
-        ctx.stroke();
-      });
+      ctx!.clearRect(0, 0, w, h);
 
-      // City nodes
-      const now = performance.now();
-      pts.forEach((pt, i) => {
-        const isHub = CITIES[i].hub;
-        if (isHub) {
-          const pr = 10 + 3 * Math.sin(now / 700);
-          ctx.beginPath();
-          ctx.arc(pt.x, pt.y, pr, 0, Math.PI * 2);
-          ctx.strokeStyle = p(0.3 + 0.15 * Math.sin(now / 700));
-          ctx.lineWidth   = 1.5;
-          ctx.stroke();
+      for (const n of nodes) {
+        n.x += n.vx * speed;
+        n.y += n.vy * speed;
+        if (n.x <= 0 || n.x >= w) { n.vx *= -1; n.x = Math.max(0, Math.min(w, n.x)); }
+        if (n.y <= 0 || n.y >= h) { n.vy *= -1; n.y = Math.max(0, Math.min(h, n.y)); }
+      }
+
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const dx = nodes[i].x - nodes[j].x;
+          const dy = nodes[i].y - nodes[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist >= maxDist) continue;
+          const proximity = 1 - dist / maxDist;
+          const alpha = proximity * (0.12 + level * 0.42);
+          ctx!.beginPath();
+          ctx!.moveTo(nodes[i].x, nodes[i].y);
+          ctx!.lineTo(nodes[j].x, nodes[j].y);
+          ctx!.strokeStyle = `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
+          ctx!.lineWidth = 0.8 + level * 0.6;
+          ctx!.stroke();
         }
-        ctx.beginPath();
-        ctx.arc(pt.x, pt.y, isHub ? 5.5 : 2.8, 0, Math.PI * 2);
-        ctx.fillStyle = isHub ? p(1) : p(0.65);
-        ctx.fill();
-      });
+      }
 
-      // Traveling packets
-      packets.forEach(pk => {
-        const pt  = pts[pk.i];
-        const cp  = ctrlPt(london, pt);
-        const t   = pk.fwd ? pk.t : 1 - pk.t;
-        const pos = bezier(t, london, cp, pt);
+      for (const n of nodes) {
+        const alpha = 0.25 + level * 0.45;
+        const radius = 1.8 + level * 1.2;
+        ctx!.beginPath();
+        ctx!.arc(n.x, n.y, radius, 0, Math.PI * 2);
+        ctx!.fillStyle = `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
+        ctx!.fill();
+      }
 
-        const grd = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, 7);
-        grd.addColorStop(0, p(0.8));
-        grd.addColorStop(1, p(0));
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, 7, 0, Math.PI * 2);
-        ctx.fillStyle = grd;
-        ctx.fill();
-
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, 2.2, 0, Math.PI * 2);
-        ctx.fillStyle = p(1);
-        ctx.fill();
-
-        pk.t += pk.speed;
-        if (pk.t >= 1) { pk.t = 0; pk.fwd = !pk.fwd; }
-      });
-
-      rafRef.current = requestAnimationFrame(draw);
+      rafId = requestAnimationFrame(frame);
     }
 
-    draw();
+    window.addEventListener('resize', resize);
+    resize();
+    frame();
 
     return () => {
-      cancelAnimationFrame(rafRef.current);
-      ro.disconnect();
+      window.removeEventListener('resize', resize);
+      cancelAnimationFrame(rafId);
     };
-  }, [theme]);
+  }, []);
 
   return (
     <canvas
       ref={canvasRef}
+      className="fixed inset-0 pointer-events-none z-0"
       aria-hidden="true"
-      className="absolute inset-0 w-full h-full pointer-events-none"
-      style={{
-        WebkitMaskImage:
-          'linear-gradient(to bottom, transparent 0px, black 120px, black calc(100% - 50px), transparent 100%)',
-        maskImage:
-          'linear-gradient(to bottom, transparent 0px, black 120px, black calc(100% - 50px), transparent 100%)',
-      }}
     />
   );
 }

@@ -1,5 +1,6 @@
 import type { Express } from 'express';
 import multer from 'multer';
+import crypto from 'crypto';
 import { requireAdmin } from './auth';
 import { handleChat } from './chat';
 import { sendEnquiryNotification, sendEnquiryConfirmation, sendEnquiryReply } from './email';
@@ -42,6 +43,27 @@ import {
   getAllErrorLogs,
   deleteErrorLogById,
   clearErrorLogs,
+  getAllClients,
+  getClientById,
+  createClient,
+  updateClient,
+  deleteClient,
+  promoteInquiryToClient,
+  getContactHistoryByClientId,
+  addContactHistoryEntry,
+  deleteContactHistoryEntry,
+  getAllClientTasks,
+  getTasksByClientId,
+  createClientTask,
+  updateClientTask,
+  deleteClientTask,
+  getInvoicesByClientId,
+  createClientInvoice,
+  updateClientInvoice,
+  deleteClientInvoice,
+  getFilesByClientId,
+  createClientFile,
+  deleteClientFile,
 } from './storage';
 import { uploadToGCS, streamGalleryImage, deleteFromGCS } from './imageStorage';
 import { insertInquirySchema } from '../shared/schema';
@@ -681,6 +703,312 @@ export function registerRoutes(app: Express) {
     } catch (err) {
       console.error('Error clearing error logs:', err);
       res.status(500).json({ error: 'Clear failed' });
+    }
+  });
+
+  // ── CRM — Clients ─────────────────────────────────────────────────────────────
+
+  // IMPORTANT: register photo route BEFORE /:id to avoid "photo" being parsed as an id
+  app.get('/api/admin/clients/photo/:objectName', requireAdmin, async (req, res) => {
+    try {
+      await streamGalleryImage(req.params.objectName, res);
+    } catch {
+      res.status(404).json({ error: 'Not found' });
+    }
+  });
+
+  app.get('/api/admin/clients', requireAdmin, async (_req, res) => {
+    try {
+      res.json(await getAllClients());
+    } catch (err) {
+      console.error('Error fetching clients:', err);
+      res.status(500).json({ error: 'Failed to fetch clients' });
+    }
+  });
+
+  app.post('/api/admin/clients', requireAdmin, async (req, res) => {
+    try {
+      const client = await createClient(req.body);
+      res.status(201).json(client);
+    } catch (err) {
+      console.error('Error creating client:', err);
+      res.status(500).json({ error: 'Failed to create client' });
+    }
+  });
+
+  // IMPORTANT: register /from-inquiry/:id BEFORE /:id to avoid route conflicts
+  app.post('/api/admin/clients/from-inquiry/:id', requireAdmin, async (req, res) => {
+    try {
+      const client = await promoteInquiryToClient(Number(req.params.id));
+      res.status(201).json(client);
+    } catch (err: unknown) {
+      console.error('Error promoting inquiry to client:', err);
+      res.status(400).json({ error: err instanceof Error ? err.message : 'Failed' });
+    }
+  });
+
+  app.get('/api/admin/clients/:id', requireAdmin, async (req, res) => {
+    try {
+      const client = await getClientById(Number(req.params.id));
+      if (!client) return res.status(404).json({ error: 'Not found' });
+      res.json(client);
+    } catch (err) {
+      console.error('Error fetching client:', err);
+      res.status(500).json({ error: 'Failed to fetch client' });
+    }
+  });
+
+  app.patch('/api/admin/clients/:id', requireAdmin, async (req, res) => {
+    try {
+      const client = await updateClient(Number(req.params.id), req.body);
+      res.json(client);
+    } catch (err) {
+      console.error('Error updating client:', err);
+      res.status(500).json({ error: 'Failed to update client' });
+    }
+  });
+
+  app.delete('/api/admin/clients/:id', requireAdmin, async (req, res) => {
+    try {
+      await deleteClient(Number(req.params.id));
+      res.status(204).end();
+    } catch (err) {
+      console.error('Error deleting client:', err);
+      res.status(500).json({ error: 'Failed to delete client' });
+    }
+  });
+
+  app.post('/api/admin/clients/:id/photo', requireAdmin, async (req, res) => {
+    try {
+      const { content, filename, contentType } = req.body as {
+        content: string; filename: string; contentType: string;
+      };
+      const buf = Buffer.from(content, 'base64');
+      const objectName = `client-photos/${crypto.randomUUID()}-${filename}`;
+      await uploadToGCS(buf, objectName, contentType);
+      const client = await updateClient(Number(req.params.id), { profilePhotoUrl: objectName });
+      res.json(client);
+    } catch (err) {
+      console.error('Error uploading client photo:', err);
+      res.status(500).json({ error: 'Failed to upload photo' });
+    }
+  });
+
+  // ── CRM — Contact history ─────────────────────────────────────────────────────
+
+  app.get('/api/admin/clients/:id/history', requireAdmin, async (req, res) => {
+    try {
+      res.json(await getContactHistoryByClientId(Number(req.params.id)));
+    } catch (err) {
+      console.error('Error fetching contact history:', err);
+      res.status(500).json({ error: 'Failed to fetch contact history' });
+    }
+  });
+
+  app.post('/api/admin/clients/:id/history', requireAdmin, async (req, res) => {
+    try {
+      const entry = await addContactHistoryEntry(Number(req.params.id), req.body.note);
+      res.status(201).json(entry);
+    } catch (err) {
+      console.error('Error adding contact history entry:', err);
+      res.status(500).json({ error: 'Failed to add contact history entry' });
+    }
+  });
+
+  app.delete('/api/admin/history/:id', requireAdmin, async (req, res) => {
+    try {
+      await deleteContactHistoryEntry(Number(req.params.id));
+      res.status(204).end();
+    } catch (err) {
+      console.error('Error deleting contact history entry:', err);
+      res.status(500).json({ error: 'Failed to delete contact history entry' });
+    }
+  });
+
+  // ── CRM — Tasks ───────────────────────────────────────────────────────────────
+
+  app.get('/api/admin/tasks', requireAdmin, async (_req, res) => {
+    try {
+      res.json(await getAllClientTasks());
+    } catch (err) {
+      console.error('Error fetching tasks:', err);
+      res.status(500).json({ error: 'Failed to fetch tasks' });
+    }
+  });
+
+  app.get('/api/admin/clients/:id/tasks', requireAdmin, async (req, res) => {
+    try {
+      res.json(await getTasksByClientId(Number(req.params.id)));
+    } catch (err) {
+      console.error('Error fetching client tasks:', err);
+      res.status(500).json({ error: 'Failed to fetch tasks' });
+    }
+  });
+
+  app.post('/api/admin/tasks', requireAdmin, async (req, res) => {
+    try {
+      const task = await createClientTask(req.body);
+      res.status(201).json(task);
+    } catch (err) {
+      console.error('Error creating task:', err);
+      res.status(500).json({ error: 'Failed to create task' });
+    }
+  });
+
+  app.patch('/api/admin/tasks/:id', requireAdmin, async (req, res) => {
+    try {
+      const task = await updateClientTask(Number(req.params.id), req.body);
+      res.json(task);
+    } catch (err) {
+      console.error('Error updating task:', err);
+      res.status(500).json({ error: 'Failed to update task' });
+    }
+  });
+
+  app.delete('/api/admin/tasks/:id', requireAdmin, async (req, res) => {
+    try {
+      await deleteClientTask(Number(req.params.id));
+      res.status(204).end();
+    } catch (err) {
+      console.error('Error deleting task:', err);
+      res.status(500).json({ error: 'Failed to delete task' });
+    }
+  });
+
+  // ── CRM — Invoices ────────────────────────────────────────────────────────────
+
+  app.get('/api/admin/clients/:id/invoices', requireAdmin, async (req, res) => {
+    try {
+      res.json(await getInvoicesByClientId(Number(req.params.id)));
+    } catch (err) {
+      console.error('Error fetching invoices:', err);
+      res.status(500).json({ error: 'Failed to fetch invoices' });
+    }
+  });
+
+  app.post('/api/admin/clients/:id/invoices', requireAdmin, async (req, res) => {
+    try {
+      const { content, filename, contentType, ...rest } = req.body as {
+        content?: string; filename?: string; contentType?: string;
+        amount: string; currency: string; status: string; notes?: string; dueDate?: string;
+      };
+      let fileObjectName: string | undefined;
+      let fileFilename: string | undefined;
+      if (content && filename && contentType) {
+        const buf = Buffer.from(content, 'base64');
+        fileObjectName = `client-invoices/${crypto.randomUUID()}-${filename}`;
+        await uploadToGCS(buf, fileObjectName, contentType);
+        fileFilename = filename;
+      }
+      const invoice = await createClientInvoice({
+        clientId: Number(req.params.id),
+        ...rest,
+        fileObjectName,
+        fileFilename,
+      });
+      res.status(201).json(invoice);
+    } catch (err) {
+      console.error('Error creating invoice:', err);
+      res.status(500).json({ error: 'Failed to create invoice' });
+    }
+  });
+
+  app.patch('/api/admin/invoices/:id', requireAdmin, async (req, res) => {
+    try {
+      const invoice = await updateClientInvoice(Number(req.params.id), req.body);
+      res.json(invoice);
+    } catch (err) {
+      console.error('Error updating invoice:', err);
+      res.status(500).json({ error: 'Failed to update invoice' });
+    }
+  });
+
+  app.get('/api/admin/invoices/:id/download', requireAdmin, async (req, res) => {
+    try {
+      const { db } = await import('./db');
+      const { clientInvoices } = await import('../shared/schema');
+      const { eq } = await import('drizzle-orm');
+      const [inv] = await db.select().from(clientInvoices).where(eq(clientInvoices.id, Number(req.params.id)));
+      if (!inv?.fileObjectName) return res.status(404).json({ error: 'No file attached to this invoice' });
+      res.setHeader('Content-Disposition', `attachment; filename="${inv.fileFilename ?? 'invoice'}"`);
+      await streamGalleryImage(inv.fileObjectName, res);
+    } catch (err) {
+      console.error('Error downloading invoice:', err);
+      if (!res.headersSent) res.status(500).json({ error: 'Failed to download invoice' });
+    }
+  });
+
+  app.delete('/api/admin/invoices/:id', requireAdmin, async (req, res) => {
+    try {
+      const invoice = await deleteClientInvoice(Number(req.params.id));
+      if (invoice?.fileObjectName) {
+        await deleteFromGCS(invoice.fileObjectName).catch(() => {});
+      }
+      res.status(204).end();
+    } catch (err) {
+      console.error('Error deleting invoice:', err);
+      res.status(500).json({ error: 'Failed to delete invoice' });
+    }
+  });
+
+  // ── CRM — Files ───────────────────────────────────────────────────────────────
+
+  app.get('/api/admin/clients/:id/files', requireAdmin, async (req, res) => {
+    try {
+      res.json(await getFilesByClientId(Number(req.params.id)));
+    } catch (err) {
+      console.error('Error fetching client files:', err);
+      res.status(500).json({ error: 'Failed to fetch files' });
+    }
+  });
+
+  app.post('/api/admin/clients/:id/files', requireAdmin, async (req, res) => {
+    try {
+      const { content, filename, contentType, label } = req.body as {
+        content: string; filename: string; contentType: string; label?: string;
+      };
+      const buf = Buffer.from(content, 'base64');
+      const objectName = `client-files/${crypto.randomUUID()}-${filename}`;
+      await uploadToGCS(buf, objectName, contentType);
+      const file = await createClientFile({
+        clientId: Number(req.params.id),
+        filename,
+        objectName,
+        contentType,
+        label,
+      });
+      res.status(201).json(file);
+    } catch (err) {
+      console.error('Error uploading client file:', err);
+      res.status(500).json({ error: 'Failed to upload file' });
+    }
+  });
+
+  app.get('/api/admin/files/:id/download', requireAdmin, async (req, res) => {
+    try {
+      const { db } = await import('./db');
+      const { clientFiles } = await import('../shared/schema');
+      const { eq } = await import('drizzle-orm');
+      const [file] = await db.select().from(clientFiles).where(eq(clientFiles.id, Number(req.params.id)));
+      if (!file) return res.status(404).json({ error: 'Not found' });
+      res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+      await streamGalleryImage(file.objectName, res);
+    } catch (err) {
+      console.error('Error downloading client file:', err);
+      if (!res.headersSent) res.status(500).json({ error: 'Failed to download file' });
+    }
+  });
+
+  app.delete('/api/admin/files/:id', requireAdmin, async (req, res) => {
+    try {
+      const file = await deleteClientFile(Number(req.params.id));
+      if (file?.objectName) {
+        await deleteFromGCS(file.objectName).catch(() => {});
+      }
+      res.status(204).end();
+    } catch (err) {
+      console.error('Error deleting client file:', err);
+      res.status(500).json({ error: 'Failed to delete file' });
     }
   });
 }
